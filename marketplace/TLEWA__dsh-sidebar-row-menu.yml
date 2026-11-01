@@ -1,0 +1,19 @@
+# awesome-dsh-plugin submission file.
+#
+# Copy this file to `data/plugins/TLEWA__dsh-sidebar-row-menu.yml` in a pull
+# request against https://github.com/awesome-dsh-plugin/awesome-dsh-plugin.
+# Do not edit the generated README files in that repository.
+#
+# Tarball is pinned to the release tag, so it cannot rot when a new release is
+# cut. Switch it to the stable alias once a release publishes
+# `dsh-sidebar-row-menu.tgz`:
+#   https://github.com/TLEWA/dsh-sidebar-row-menu/releases/latest/download/dsh-sidebar-row-menu.tgz
+
+url: https://github.com/TLEWA/dsh-sidebar-row-menu
+name: TLEWA/dsh-sidebar-row-menu
+category: ui
+description:
+  en: 'Adds pointer-anchored right-click menus to DSH sidebar workspace and session rows, including open-in-VS-Code, open-in-Explorer, copy-path, and copy-session-link actions.'
+  zh: '为 DSH 侧边栏的工作区行和会话行添加指针处右键菜单，可在 VS Code、资源管理器中打开，并复制路径和会话链接。'
+icon: https://raw.githubusercontent.com/TLEWA/dsh-sidebar-row-menu/main/assets/icon-180.png
+tarball: https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.2/dsh-sidebar-row-menu-1.3.2.tgz

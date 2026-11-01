@@ -1,5 +1,7 @@
 # dsh-sidebar-row-menu
 
+<img src="assets/icon-180.png" width="96" align="right" alt="Plugin icon" />
+
 [![CI](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml)
 [![Release](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/release.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/releases)
 
@@ -107,6 +109,14 @@ Automation: every push / pull request runs syntax checks, the full test suite an
 package verification in GitHub Actions; pushing a `v*` tag builds the tarball and
 creates a GitHub Release with `dsh-sidebar-row-menu-<version>.tgz` and
 `SHA256SUMS.txt`.
+
+### Plugin marketplace
+
+The repository is prepared for the
+[awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
+listing; the submission entry lives in [`marketplace/`](marketplace/). It becomes
+eligible 24 hours after the repository was created. Until it is listed, install via
+the GitHub URL above.
 
 ### Manual install (clone the repository)
 

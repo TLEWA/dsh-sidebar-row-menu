@@ -8,6 +8,7 @@
     "dsh",
     "deepseek-harness",
     "plugin",
+    "dsh-plugin",
     "sidebar",
     "context-menu",
     "workspace",
@@ -28,6 +29,7 @@
   },
   "files": [
     "lib",
+    "assets",
     "scripts/install.ps1",
     "cordis.patch.yml",
     "README.md",
@@ -58,6 +60,7 @@
     "test:local": "node --test --test-isolation=none test/host.test.mjs test/client.test.mjs",
     "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js",
     "build": "npm pack",
+    "marketplace:check": "node scripts/marketplace-preflight.mjs",
     "prepack": "npm run check",
     "prepublishOnly": "npm run check"
   },

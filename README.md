@@ -1,5 +1,7 @@
 # dsh-sidebar-row-menu
 
+<img src="assets/icon-180.png" width="96" align="right" alt="插件图标" />
+
 [![CI](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml)
 [![Release](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/release.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/releases)
 
@@ -99,6 +101,12 @@ dsh plugin --profile desktop add github:TLEWA/dsh-sidebar-row-menu
 自动化：每次 push / PR 由 GitHub Actions 执行语法检查、完整测试和打包校验；推送
 `v*` 标签时自动创建 Release，附带 `dsh-sidebar-row-menu-<version>.tgz` 与
 `SHA256SUMS.txt`。
+
+### 插件市场
+
+本仓库已按 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
+的收录要求准备好条目，见 [`marketplace/`](marketplace/)；仓库创建满 24 小时后即可提交
+审核。收录前请继续使用上面的 GitHub 地址安装。
 
 ### 手动安装（克隆仓库）
 

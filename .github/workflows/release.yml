@@ -35,6 +35,9 @@ jobs:
       - name: Build the package
         run: npm pack
 
+      - name: Add the version-free download alias
+        run: cp dsh-sidebar-row-menu-*.tgz dsh-sidebar-row-menu.tgz
+
       - name: Write checksums
         run: sha256sum ./*.tgz > SHA256SUMS.txt
 

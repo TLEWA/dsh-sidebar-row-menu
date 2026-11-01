@@ -3,6 +3,11 @@ tmp/
 node_modules/
 *.log
 
+# npm 打包 / 发布产物
+.npm-cache/
+.pkgtest/
+*.tgz
+
 # 编辑器 / 系统
 .DS_Store
 Thumbs.db

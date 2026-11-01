@@ -56,7 +56,11 @@
   "scripts": {
     "test": "node --test test/host.test.mjs test/client.test.mjs",
     "test:local": "node --test --test-isolation=none test/host.test.mjs test/client.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js"
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js",
+    "prepublishOnly": "npm run check"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "repository": {
     "type": "git",

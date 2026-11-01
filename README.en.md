@@ -67,7 +67,7 @@ Requirements:
 - Row components from the `0.2.1-rc.5` generation (see [Compatibility](#compatibility)).
 
 ```powershell
-git clone <this-repo> dsh-sidebar-row-menu
+git clone https://github.com/TLEWA/dsh-sidebar-row-menu.git dsh-sidebar-row-menu
 cd dsh-sidebar-row-menu
 powershell -NoProfile -File .\scripts\install.ps1
 ```

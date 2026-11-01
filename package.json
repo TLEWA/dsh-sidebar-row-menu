@@ -57,5 +57,13 @@
     "test": "node --test test/host.test.mjs test/client.test.mjs",
     "test:local": "node --test --test-isolation=none test/host.test.mjs test/client.test.mjs",
     "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TLEWA/dsh-sidebar-row-menu.git"
+  },
+  "homepage": "https://github.com/TLEWA/dsh-sidebar-row-menu#readme",
+  "bugs": {
+    "url": "https://github.com/TLEWA/dsh-sidebar-row-menu/issues"
   }
 }

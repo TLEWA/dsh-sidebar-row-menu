@@ -61,7 +61,7 @@
 - 与 DSH 客户端内置包 `0.2.1-rc.5` 同代的行组件（见[兼容性](#兼容性)）。
 
 ```powershell
-git clone <this-repo> dsh-sidebar-row-menu
+git clone https://github.com/TLEWA/dsh-sidebar-row-menu.git dsh-sidebar-row-menu
 cd dsh-sidebar-row-menu
 powershell -NoProfile -File .\scripts\install.ps1
 ```

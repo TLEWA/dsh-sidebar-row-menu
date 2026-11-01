@@ -1,8 +1,8 @@
 {
   "name": "dsh-sidebar-row-menu",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
-  "description": "DSH plugin: official-style right-click menus for workspace rows and the sessions nested under them — rename, fork, pin, archive, open in VS Code / File Explorer, copy links and paths.",
+  "description": "DSH plugin: official-style right-click menus for workspace rows; session rows open the native slot-composed menu (built-in and third-party actions included), with VS Code / File Explorer / copy-link entries contributed back to that slot.",
   "keywords": [
     "deepseek",
     "dsh",

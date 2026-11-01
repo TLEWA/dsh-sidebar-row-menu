@@ -54,6 +54,7 @@ function makeRequire(seen, roots, clipboard) {
         return true;
       },
       Menu: function Menu() {},
+      MenuItemButton: function MenuItemButton() {},
     },
     {
       get(target, key) {
@@ -66,9 +67,9 @@ function makeRequire(seen, roots, clipboard) {
     seen.push(id);
     switch (id) {
       case 'react':
-        return { useCallback: (fn) => fn, useState: (value) => [value, () => {}], Fragment: Symbol('Fragment') };
+        return { useCallback: (fn) => fn };
       case 'react/jsx-runtime':
-        return { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) };
+        return { jsx: (type, props) => ({ type, props }) };
       case 'react-dom/client':
         return {
           createRoot(host) {
@@ -88,8 +89,27 @@ function makeRequire(seen, roots, clipboard) {
   };
 }
 
-function makeCtx(services = {}) {
+function makeSlots() {
+  const registrations = [];
   return {
+    registrations,
+    inject(name, generator) {
+      const iterator = generator();
+      let step = iterator.next();
+      while (!step.done) step = iterator.next();
+      return () => {};
+    },
+    register(spec, Component) {
+      registrations.push({ spec, Component });
+      return () => {};
+    },
+  };
+}
+
+function makeCtx(services = {}) {
+  const slots = makeSlots();
+  return {
+    slots,
     locale: {
       register: () => () => {},
       bind: () => (key) => key,
@@ -99,6 +119,7 @@ function makeCtx(services = {}) {
       return typeof dispose === 'function' ? dispose : () => {};
     },
     get(name) {
+      if (name === 'slots') return slots;
       return services[name];
     },
     ...services,
@@ -115,7 +136,7 @@ test('client module registers the expected factory and exports', () => {
   assert.equal(exported.name, 'sidebar-row-menu');
   assert.equal(typeof exported.apply, 'function');
   // The array lives in the vm realm, so compare by value rather than prototype.
-  assert.equal(exported.inject.join(','), 'locale,sessions,workspaces,uiWorkspace');
+  assert.equal(exported.inject.join(','), 'locale,sessions,workspaces,slots');
   assert.equal(
     [...new Set(seen)].sort().join(','),
     [
@@ -127,7 +148,7 @@ test('client module registers the expected factory and exports', () => {
   );
 });
 
-test('client apply installs and uninstalls a capture listener', () => {
+test('apply installs the capture listener and registers session menu entries', () => {
   const { registration, listeners } = loadClient();
   const exported = registration.factory(makeRequire([], [], []));
 
@@ -141,20 +162,67 @@ test('client apply installs and uninstalls a capture listener', () => {
   };
 
   exported.apply(ctx);
+
   assert.equal(listeners.length, 1);
   assert.equal(listeners[0].type, 'contextmenu');
   assert.equal(listeners[0].capture, true);
+
+  // Right-click must not hardcode built-in actions: the only session entries are ours,
+  // contributed through the same slot the built-in "..." menu renders.
+  assert.equal(
+    ctx.slots.registrations.map((entry) => entry.spec.id).join(','),
+    'row-menu-vscode,row-menu-explorer,row-menu-copy-link',
+  );
+  for (const entry of ctx.slots.registrations) {
+    assert.equal(entry.spec.name, 'sidebar.workspaces.session.menu.item');
+    assert.equal(entry.spec.locale, 'sidebar-row-menu');
+  }
+  assert.deepEqual(
+    ctx.slots.registrations.map((entry) => entry.spec.order),
+    [500, 510, 520],
+  );
+
   for (const dispose of cleanups) dispose();
   assert.equal(listeners.length, 0);
 });
 
+test('session menu contribution copies the deep link and closes the menu', async () => {
+  const roots = [];
+  const clipboard = [];
+  const { registration } = loadClient();
+  const exported = registration.factory(makeRequire([], roots, clipboard));
+  const ctx = makeCtx();
+  exported.apply(ctx);
+
+  const link = ctx.slots.registrations.find((entry) => entry.spec.id === 'row-menu-copy-link');
+  const closed = [];
+  const element = link.Component({
+    sessionId: 's1',
+    useMenuOpenState: () => [true, (value) => closed.push(value)],
+    t: (key) => key,
+  });
+  assert.equal(element.type.name, 'MenuItemButton');
+  element.props.onSelect();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(clipboard.at(-1), 'http://127.0.0.1:10102/?session=s1');
+  assert.equal(closed.join(','), 'false');
+});
+
 /** Build a fake sidebar row carrying React fiber props. */
-function makeRowTarget(rowKey, props) {
-  const row = { getAttribute: () => rowKey };
-  const fiber = { memoizedProps: props, return: null };
+function makeRowTarget(rowKey, props, menuProps = null) {
+  const menuFiber = menuProps === null
+    ? null
+    : { memoizedProps: menuProps, child: null, sibling: null, return: null };
+  const fiber = { memoizedProps: props, child: menuFiber, sibling: null, return: null };
+  const row = {
+    getAttribute: () => rowKey,
+    querySelector: () => null,
+    __reactFiber$test: fiber,
+  };
   return {
     closest: () => row,
     __reactFiber$test: fiber,
+    row,
   };
 }
 
@@ -216,56 +284,40 @@ test('workspace row opens the expected menu without touching unrelated rows', ()
   assert.equal(events.join(','), 'new-session');
 });
 
-test('session row menu renames, forks, copies and archives through services', async () => {
+test('session row right-click opens the built-in slot-composed menu', () => {
+  const { registration, listeners } = loadClient();
   const roots = [];
-  const clipboard = [];
-  const calls = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const clicks = [];
 
-  const ui = {
-    forkSession: (...args) => calls.push(['fork', ...args]),
-    openSession: (...args) => calls.push(['open', ...args]),
-    pinSession: (...args) => calls.push(['pin', ...args]),
-    unpinSession: (...args) => calls.push(['unpin', ...args]),
-    archiveSession: (...args) => calls.push(['archive', ...args]),
-    unarchiveSession: (...args) => calls.push(['unarchive', ...args]),
+  const menuProps = {
+    open: false,
+    anchor: { props: { onClick: () => clicks.push('toggle') } },
   };
   const props = {
-    node: {
-      id: 's1',
-      title: 'Session 1',
-      blank: false,
-      running: false,
-      archived: false,
-      pinned: false,
-      updatedAt: 1,
-    },
-    onRenameRequest: (...args) => calls.push(['rename', ...args]),
+    node: { id: 's1', title: 'Session 1', blank: false, updatedAt: 1 },
+    onRenameRequest: () => {},
   };
-  const target = makeRowTarget('session:s1', props);
+  const target = makeRowTarget('session:s1', props, menuProps);
 
-  const ctx = makeCtx({ uiWorkspace: ui });
-  const fresh = loadClient();
-  const freshExported = fresh.registration.factory(makeRequire([], roots, clipboard));
-  freshExported.apply(ctx);
+  exported.apply(makeCtx());
+  const listener = listeners[listeners.length - 1].listener;
 
-  const listener = fresh.listeners[fresh.listeners.length - 1].listener;
   const event = fireContextMenu(listener, target);
   assert.equal(event.defaultPrevented, true);
+  assert.equal(clicks.join(','), 'toggle');
+  // The official menu was toggled in place; this plugin did not mount its own copy.
+  assert.equal(roots.length, 0);
 
-  const { menu } = menuOf(roots);
-  assert.equal(
-    menu.props.items.map((item) => item.id).join(','),
-    ['rename', 'fork', 'pin', 'sep1', 'vscode', 'explorer', 'sep2', 'copy-link', 'copy-id', 'sep3', 'archive'].join(','),
+  // Draft sessions have no built-in menu and must not be intercepted.
+  const draft = fireContextMenu(
+    listener,
+    makeRowTarget('session:draft', { node: { id: 'draft', blank: true }, onRenameRequest: () => {} }),
   );
+  assert.equal(draft.defaultPrevented, false);
 
-  menu.props.onSelect('rename');
-  assert.equal(calls.at(-1).join(','), 'rename,s1,Session 1');
-
-  menu.props.onSelect('copy-id');
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(clipboard.join(','), 's1');
-
-  menu.props.onSelect('copy-link');
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(clipboard.at(-1), 'http://127.0.0.1:10102/?session=s1');
+  // An already open menu is left alone rather than toggled shut.
+  menuProps.open = true;
+  fireContextMenu(listener, target);
+  assert.equal(clicks.join(','), 'toggle');
 });

@@ -1,5 +1,8 @@
 # dsh-sidebar-row-menu
 
+[![CI](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml)
+[![Release](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/release.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/releases)
+
 [简体中文](README.md) · [English](README.en.md)
 
 给 [DeepSeek Harness](https://github.com/deepseek-ai)（DSH）左侧边栏加右键菜单：
@@ -61,6 +64,38 @@
 - Windows PowerShell 5.1+；
 - 与 DSH 客户端内置包 `0.2.1-rc.5` 同代的行组件（见[兼容性](#兼容性)）。
 
+### 从 GitHub 直接安装（推荐）
+
+DSH 桌面端通过 pnpm 安装 Git 依赖；本仓库的 `lib/` 已是可直接运行的产物，安装时
+**不需要本地构建**。
+
+1. 打开侧边栏 **插件** 页 → **安装插件**；
+2. 粘贴仓库地址并确认：
+
+   ```
+   https://github.com/TLEWA/dsh-sidebar-row-menu
+   ```
+
+3. 安装完成后硬刷新（`Ctrl+Shift+R`）；宿主半边未生效时重启桌面端。
+
+该地址跟随 `main` 的最新提交。要固定版本，在地址后加标签：
+
+```
+https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.2
+```
+
+命令行等价写法：
+
+```powershell
+dsh plugin --profile desktop add github:TLEWA/dsh-sidebar-row-menu
+```
+
+自动化：每次 push / PR 由 GitHub Actions 执行语法检查、完整测试和打包校验；推送
+`v*` 标签时自动创建 Release，附带 `dsh-sidebar-row-menu-<version>.tgz` 与
+`SHA256SUMS.txt`。
+
+### 手动安装（克隆仓库）
+
 ```powershell
 git clone https://github.com/TLEWA/dsh-sidebar-row-menu.git dsh-sidebar-row-menu
 cd dsh-sidebar-row-menu
@@ -114,6 +149,7 @@ powershell -NoProfile -File .\scripts\install.ps1 -Uninstall
 ```powershell
 npm run test        # 常规：node --test，逐文件子进程
 npm run test:local  # 受限终端 / 沙箱：--test-isolation=none，同进程跑
+npm run build       # npm pack（prepack 会先跑 check），产出 .tgz
 ```
 
 测试覆盖宿主侧纯函数（路径校验、`vscode://file` 编码、loopback 判定、路由状态码）

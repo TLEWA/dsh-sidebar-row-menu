@@ -1,5 +1,8 @@
 # dsh-sidebar-row-menu
 
+[![CI](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml)
+[![Release](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/release.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/releases)
+
 [简体中文](README.md) · [English](README.en.md)
 
 Right-click menus for the sidebar of [DeepSeek Harness](https://github.com/deepseek-ai) (DSH):
@@ -68,6 +71,39 @@ Requirements:
 - Windows PowerShell 5.1+;
 - Row components from the `0.2.1-rc.5` generation (see [Compatibility](#compatibility)).
 
+### Install from GitHub (recommended)
+
+DSH Desktop installs Git dependencies through pnpm. The `lib/` directory in this
+repository is already runnable, so **no local build is required**.
+
+1. Open **Plugins** in the sidebar → **Install plugin**;
+2. Paste the repository URL and confirm:
+
+   ```
+   https://github.com/TLEWA/dsh-sidebar-row-menu
+   ```
+
+3. Hard-refresh (`Ctrl+Shift+R`); restart the desktop app if the host half is not active.
+
+That URL tracks the latest commit on `main`. Pin a tag for a stable version:
+
+```
+https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.2
+```
+
+Equivalent command line:
+
+```powershell
+dsh plugin --profile desktop add github:TLEWA/dsh-sidebar-row-menu
+```
+
+Automation: every push / pull request runs syntax checks, the full test suite and a
+package verification in GitHub Actions; pushing a `v*` tag builds the tarball and
+creates a GitHub Release with `dsh-sidebar-row-menu-<version>.tgz` and
+`SHA256SUMS.txt`.
+
+### Manual install (clone the repository)
+
 ```powershell
 git clone https://github.com/TLEWA/dsh-sidebar-row-menu.git dsh-sidebar-row-menu
 cd dsh-sidebar-row-menu
@@ -127,6 +163,7 @@ repository itself is untouched.
 ```powershell
 npm run test        # normal: node --test, one child process per file
 npm run test:local  # restricted terminals / sandboxes: --test-isolation=none
+npm run build       # npm pack (prepack runs check first), writes the .tgz
 ```
 
 The suite covers host pure functions (path validation, `vscode://file` encoding,

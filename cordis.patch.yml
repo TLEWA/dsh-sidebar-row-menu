@@ -1,0 +1,5 @@
+# 作为 profile bundle patch 层，把本插件插进插件清单。
+# 安装方式见 README.md / scripts/install.ps1。
+- insert:
+    - id: sidebar-row-menu
+      name: 'dsh-sidebar-row-menu'

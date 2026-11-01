@@ -21,6 +21,14 @@ const fail = (message, detail = '') => {
   console.log(`FAIL  ${message}${detail ? ` — ${detail}` : ''}`);
 };
 
+// The submission entry is local-only (git-ignored), so a fresh clone has no
+// marketplace/ directory. Treat that as "nothing to check", not as a failure.
+if (!existsSync(entryPath)) {
+  warn('marketplace entry', 'marketplace/ is local-only and absent in this checkout');
+  console.log('\nREADY — 0 failure(s), 1 warning(s)');
+  process.exit(0);
+}
+
 function readPngSize(file) {
   const buffer = readFileSync(file);
   const signature = buffer.subarray(0, 8).toString('hex');

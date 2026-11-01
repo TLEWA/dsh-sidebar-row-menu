@@ -6,7 +6,9 @@ node_modules/
 # npm 打包 / 发布产物
 .npm-cache/
 .pkgtest/
+.registrytest/
 *.tgz
+.npmrc
 
 # 插件市场提交材料只保留在本地，不随插件仓库发布
 marketplace/

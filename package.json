@@ -28,6 +28,7 @@
   },
   "files": [
     "lib",
+    "scripts/install.ps1",
     "cordis.patch.yml",
     "README.md",
     "README.en.md",

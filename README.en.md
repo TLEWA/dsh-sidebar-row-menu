@@ -48,17 +48,16 @@ Right-click does not build a second menu; it opens the row's own "…" menu:
 | --- | --- |
 | DSH built-ins | Rename, Fork session, Pin / Unpin, Archive / Unarchive, Copy Session ID |
 | Other plugins | Whatever they register into `sidebar.workspaces.session.menu.item` |
-| This plugin | Open in VS Code, Open in Explorer, Copy session link |
+| This plugin | Open in VS Code, Open in Explorer |
 
-The three entries added by this plugin:
+The two entries added by this plugin:
 
 | Item | Behavior |
 | --- | --- |
 | Open in VS Code | Uses the session's `cwd`, falling back to its workspace directory |
 | Open in Explorer | Same as above |
-| Copy session link | Copies the `?session=<id>` deep link |
 
-These three are **right-click only**: they do not mount when the "…" button opens
+These two are **right-click only**: they do not mount when the "…" button opens
 the menu. A short-lived window flag is set before opening; outside that window the
 entries render `null`.
 
@@ -244,8 +243,8 @@ loopback checks, route status codes) and the client module (module id, exports,
 dependency whitelist, listener install/uninstall, slot registry). Integration
 tests use a fake `__reactFiber$`, DOM and `Menu` host to assert workspace menu
 ordering, session right-click delegating to the native menu, blank rows being
-skipped, and clipboard content for copy-link. Real fibers and services still need
-a manual check in a running GUI.
+skipped, and the success toast shown when copying a workspace path. Real fibers and
+services still need a manual check in a running GUI.
 
 Layout:
 

@@ -70,10 +70,10 @@ Not fully verified:
 
 - The plugin runs locally and contains **no telemetry, analytics or remote requests**.
 - The client reads workspace/session objects already in DSH's memory (title, `cwd`,
-  archived/pinned state) to build menus and copy paths/links.
+  archived/pinned state) to build menus and copy paths.
 - The host route accepts loopback requests only and opens **existing absolute
   directories** only.
-- Clipboard writes happen only when you click "Copy path / Copy link / Copy ID".
+- Clipboard writes happen only when you click "Copy workspace path / Copy Session ID".
 
 ## 7. Recommendations
 

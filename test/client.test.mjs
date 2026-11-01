@@ -66,6 +66,7 @@ function makeRequire(seen, roots, clipboard) {
       },
       Menu: function Menu() {},
       MenuItemButton: function MenuItemButton() {},
+      Toast: function Toast() {},
     },
     {
       get(target, key) {
@@ -185,7 +186,7 @@ test('apply installs the capture listener and registers session menu entries', (
   // contributed through the same slot the built-in "..." menu renders.
   assert.equal(
     ctx.slots.registrations.map((entry) => entry.spec.id).join(','),
-    'row-menu-vscode,row-menu-explorer,row-menu-copy-link',
+    'row-menu-vscode,row-menu-explorer',
   );
   for (const entry of ctx.slots.registrations) {
     assert.equal(entry.spec.name, 'sidebar.workspaces.session.menu.item');
@@ -193,46 +194,38 @@ test('apply installs the capture listener and registers session menu entries', (
   }
   assert.deepEqual(
     ctx.slots.registrations.map((entry) => entry.spec.order),
-    [500, 510, 520],
+    [500, 510],
   );
 
   for (const dispose of cleanups) dispose();
   assert.equal(listeners.length, 0);
 });
 
-test('session menu contribution copies the deep link and closes the menu', async () => {
+test('workspace copy path reports through the official success toast', async () => {
   const roots = [];
   const clipboard = [];
   const { registration, listeners } = loadClient();
   const exported = registration.factory(makeRequire([], roots, clipboard));
-  const ctx = makeCtx();
-  exported.apply(ctx);
+  exported.apply(makeCtx());
 
-  const link = ctx.slots.registrations.find((entry) => entry.spec.id === 'row-menu-copy-link');
-  const closed = [];
-  const render = () => link.Component({
-    sessionId: 's1',
-    useMenuOpenState: () => [true, (value) => closed.push(value)],
-    t: (key) => key,
-  });
-
-  // 点「…」打开的菜单里不显示插件条目。
-  assert.equal(render(), null);
-
-  // 右键之后打开的菜单里才显示。
+  const props = {
+    group: { key: 'w1', workspaceId: 'w1', label: 'Work', cwd: 'C:\\Work' },
+    actions: { rename: () => {}, delete: () => {} },
+    onCreate: () => {},
+  };
   const listener = listeners[listeners.length - 1].listener;
-  fireContextMenu(listener, makeRowTarget(
-    'session:s1',
-    { node: { id: 's1', title: 'Session 1', blank: false, updatedAt: 1 }, onRenameRequest: () => {} },
-    { open: false, anchor: { props: { onClick: () => {} } } },
-  ));
+  fireContextMenu(listener, makeRowTarget('workspace:w1', props));
 
-  const element = render();
-  assert.equal(element.type.name, 'MenuItemButton');
-  element.props.onSelect();
+  const { menu } = menuOf(roots);
+  menu.props.onSelect('copy-path');
   await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(clipboard.at(-1), 'http://127.0.0.1:10102/?session=s1');
-  assert.equal(closed.join(','), 'false');
+
+  assert.equal(clipboard.at(-1), 'C:\\Work');
+  const toastElement = roots.at(-1).host.__element;
+  assert.equal(toastElement.type.name, 'Toast');
+  assert.equal(toastElement.props.text, 'copied');
+  // Same success presentation as the built-in "Copy Session ID" toast.
+  assert.equal(toastElement.props.tone, 'success');
 });
 
 /** Build a fake sidebar row carrying React fiber props. */

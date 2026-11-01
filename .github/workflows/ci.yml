@@ -42,7 +42,8 @@ jobs:
         run: |
           set -euo pipefail
           ls -l ./*.tgz
-          tar -tzf ./*.tgz | sort
+          tar -tzf ./*.tgz | sort > package-contents.txt
+          cat package-contents.txt
           for entry in \
             package/package.json \
             package/lib/index.js \
@@ -53,7 +54,7 @@ jobs:
             package/README.en.md \
             package/NOTICE.md \
             package/AI_USAGE.md; do
-            tar -tzf ./*.tgz | grep -qx "$entry" || {
+            grep -qx "$entry" package-contents.txt || {
               echo "::error::missing $entry in the package tarball"
               exit 1
             }

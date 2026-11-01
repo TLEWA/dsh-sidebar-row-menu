@@ -104,9 +104,9 @@ dsh plugin --profile desktop add github:TLEWA/dsh-sidebar-row-menu
 
 ### 插件市场
 
-本仓库已按 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
-的收录要求准备好条目，见 [`marketplace/`](marketplace/)；仓库创建满 24 小时后即可提交
-审核。收录前请继续使用上面的 GitHub 地址安装。
+面向 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) 的
+提交材料（条目 YAML、预检脚本）只保留在本地，已加入 `.gitignore`，不随本仓库发布；
+正式提交时只需把条目文件放进上游仓库的一个 PR。收录前请继续使用上面的 GitHub 地址安装。
 
 ### 手动安装（克隆仓库）
 
@@ -157,6 +157,31 @@ powershell -NoProfile -File .\scripts\install.ps1 -Uninstall
 
 > 不要用 `dsh plugin add link:<绝对路径>`：pnpm 在 Windows 上把 `link:` 当成相对
 > profile 的路径，跨盘时会生成坏链接；脚本正是为了绕开这一点。
+
+### 从脚本安装切换到 GitHub 安装
+
+如果你先用 `scripts/install.ps1` 装过开发版，再在插件页输入 GitHub 地址，pnpm 可能报：
+
+```
+[ERR_PNPM_EPERM] [importPackage ...\node_modules\dsh-sidebar-row-menu]
+EPERM: operation not permitted, rename
+'...\dsh-sidebar-row-menu_tmp_27508_27' -> '...\dsh-sidebar-row-menu'
+```
+
+原因是脚本在 `node_modules` 里留了一个目录联接，而 pnpm 导入新包时用 rename 覆盖目标；
+Windows 不允许这样替换一个已存在的联接目录。先卸载脚本安装，再重试：
+
+```powershell
+powershell -NoProfile -File .\scripts\install.ps1 -Uninstall
+```
+
+如果卸载后目录仍在（或安装失败留下了 `*_tmp_*` 目录），手动删除后重试：
+
+```powershell
+cmd /c rmdir "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-sidebar-row-menu"
+```
+
+全新 profile 不会遇到这个问题；它只影响“先脚本安装、后 GitHub 安装”的切换场景。
 
 ## 开发
 

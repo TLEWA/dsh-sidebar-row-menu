@@ -8,6 +8,9 @@ node_modules/
 .pkgtest/
 *.tgz
 
+# 插件市场提交材料只保留在本地，不随插件仓库发布
+marketplace/
+
 # 编辑器 / 系统
 .DS_Store
 Thumbs.db

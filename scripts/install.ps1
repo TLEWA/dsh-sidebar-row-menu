@@ -22,6 +22,12 @@
   Restart the desktop app after installing the host half (lib/index.js);
   a hard refresh is enough for client-only changes.
 
+  This is a development install. If you later install the plugin from its GitHub
+  URL through the Plugins page, run this script with -Uninstall first: pnpm
+  imports the package by renaming a directory over
+  <profile>\node_modules\<package>, and Windows refuses to replace the junction
+  this script leaves there (ERR_PNPM_EPERM). A fresh profile has no conflict.
+
 .PARAMETER Profile
   desktop | web | both, or the absolute path of a profile directory.
   Default: desktop.

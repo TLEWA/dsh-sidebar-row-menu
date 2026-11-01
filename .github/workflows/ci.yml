@@ -34,9 +34,6 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Check marketplace metadata
-        run: node scripts/marketplace-preflight.mjs --offline
-
       - name: Build the package
         run: npm pack
 

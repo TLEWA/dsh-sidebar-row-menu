@@ -112,11 +112,12 @@ creates a GitHub Release with `dsh-sidebar-row-menu-<version>.tgz` and
 
 ### Plugin marketplace
 
-The repository is prepared for the
+The submission material for the
 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)
-listing; the submission entry lives in [`marketplace/`](marketplace/). It becomes
-eligible 24 hours after the repository was created. Until it is listed, install via
-the GitHub URL above.
+listing (entry YAML and preflight script) is kept locally and is git-ignored; it
+is not part of this repository. Submitting only requires the entry file in one
+pull request against the upstream catalogue. Until the plugin is listed, install
+via the GitHub URL above.
 
 ### Manual install (clone the repository)
 
@@ -173,6 +174,36 @@ repository itself is untouched.
 > Do not use `dsh plugin add link:<absolute path>`: on Windows pnpm treats `link:`
 > as relative to the profile, and cross-drive paths produce broken links. The
 > script exists to avoid exactly that.
+
+### Switching from the script install to the GitHub install
+
+If you installed the development copy with `scripts/install.ps1` and then paste
+the GitHub URL into the Plugins page, pnpm may fail with:
+
+```
+[ERR_PNPM_EPERM] [importPackage ...\node_modules\dsh-sidebar-row-menu]
+EPERM: operation not permitted, rename
+'...\dsh-sidebar-row-menu_tmp_27508_27' -> '...\dsh-sidebar-row-menu'
+```
+
+The script leaves a directory junction inside `node_modules`, and pnpm imports a
+new package by renaming a temporary directory over the target; Windows will not
+replace an existing junction that way. Uninstall the script install first, then
+retry:
+
+```powershell
+powershell -NoProfile -File .\scripts\install.ps1 -Uninstall
+```
+
+If the directory is still there (or a failed attempt left `*_tmp_*` entries),
+remove it manually and retry:
+
+```powershell
+cmd /c rmdir "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-sidebar-row-menu"
+```
+
+A fresh profile never hits this; it only affects the "script install, then
+GitHub install" transition.
 
 ## Development
 

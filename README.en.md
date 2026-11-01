@@ -17,7 +17,9 @@ actions are all there. This plugin only appends its own entries; it does not cop
 or hardcode any built-in action.
 
 > The "…" button menu stays exactly as DSH ships it. The plugin's three entries
-> appear only when the menu is opened by right-click.
+> appear only when the menu is opened by right-click. A right-click menu does not
+> close when the pointer leaves it (same as the workspace menu); it closes only on
+> an outside click, an item selection, or Escape.
 
 ## Features
 

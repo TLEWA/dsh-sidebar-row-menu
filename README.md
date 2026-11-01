@@ -151,8 +151,9 @@ test/*.test.mjs      node:test
 
 ## 已知限制
 
-- 依赖 DSH 内置行组件的 props 形状（`0.2.1-rc.5` 验证通过）。DSH 升级若改了
-  `ProjectRowItem` / `SessionNodeItem`，右键会静默不弹（不会报错、不影响原界面）。
+- 依赖 DSH 内置行组件的 props 形状（按 `0.2.1-rc.5` 的 `ProjectRowItem` /
+  `SessionNodeItem` 实现）。DSH 升级若改了这两个组件，右键会静默不弹（不会报错、
+  不影响原界面）。
 - 会话的“删除”未提供：DSH 官方只支持归档，归档后可恢复；强行删记录容易留下孤儿数据。
 - 会话行右键的 VS Code / 资源管理器目录来自 `sessions.list` 的 `cwd`，取不到时退回
   所属工作区目录；未分组会话可能没有目录，此时会提示“没有可用的目录路径”。

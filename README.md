@@ -1,6 +1,6 @@
 # dsh-sidebar-row-menu
 
-<img src="assets/icon-180.png" width="96" align="right" alt="插件图标" />
+<img src="https://raw.githubusercontent.com/TLEWA/dsh-sidebar-row-menu/main/assets/icon-180.png" width="96" align="right" alt="插件图标" />
 
 [![CI](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml)
 [![Release](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/release.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/releases)
@@ -66,7 +66,32 @@
 - Windows PowerShell 5.1+；
 - 与 DSH 客户端内置包 `0.2.1-rc.5` 同代的行组件（见[兼容性](#兼容性)）。
 
-### 从 GitHub 直接安装（推荐）
+### 从 npm 安装（推荐）
+
+包已发布到 npm registry，DSH 的插件安装器可以直接按包名解析：
+
+1. 打开侧边栏 **插件** 页 → **安装插件**；
+2. 输入包名并确认：
+
+   ```
+   dsh-sidebar-row-menu
+   ```
+
+3. 安装完成后硬刷新（`Ctrl+Shift+R`）；宿主半边未生效时重启桌面端。
+
+要固定版本，在包名后加版本号：
+
+```
+dsh-sidebar-row-menu@1.3.3
+```
+
+命令行等价写法：
+
+```powershell
+dsh plugin --profile desktop add dsh-sidebar-row-menu@1.3.3
+```
+
+### 从 GitHub 安装
 
 DSH 桌面端通过 pnpm 安装 Git 依赖；本仓库的 `lib/` 已是可直接运行的产物，安装时
 **不需要本地构建**。
@@ -83,13 +108,13 @@ DSH 桌面端通过 pnpm 安装 Git 依赖；本仓库的 `lib/` 已是可直接
 该地址跟随 `main` 的最新提交。要固定版本，在地址后加标签：
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.2
+https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.3
 ```
 
 也可以直接安装 Actions 打出的压缩包（不经过 Git）：
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.2/dsh-sidebar-row-menu-1.3.2.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.3/dsh-sidebar-row-menu-1.3.3.tgz
 ```
 
 命令行等价写法：
@@ -158,9 +183,9 @@ powershell -NoProfile -File .\scripts\install.ps1 -Uninstall
 > 不要用 `dsh plugin add link:<绝对路径>`：pnpm 在 Windows 上把 `link:` 当成相对
 > profile 的路径，跨盘时会生成坏链接；脚本正是为了绕开这一点。
 
-### 从脚本安装切换到 GitHub 安装
+### 从脚本安装切换到 pnpm 安装（npm / GitHub）
 
-如果你先用 `scripts/install.ps1` 装过开发版，再在插件页输入 GitHub 地址，pnpm 可能报：
+如果你先用 `scripts/install.ps1` 装过开发版，再在插件页输入 npm 包名或 GitHub 地址，pnpm 可能报：
 
 ```
 [ERR_PNPM_EPERM] [importPackage ...\node_modules\dsh-sidebar-row-menu]
@@ -181,7 +206,7 @@ powershell -NoProfile -File .\scripts\install.ps1 -Uninstall
 cmd /c rmdir "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-sidebar-row-menu"
 ```
 
-全新 profile 不会遇到这个问题；它只影响“先脚本安装、后 GitHub 安装”的切换场景。
+全新 profile 不会遇到这个问题；它只影响“先脚本安装、后 pnpm（npm 或 GitHub）安装”的切换场景。
 
 ## 开发
 

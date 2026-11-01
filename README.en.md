@@ -1,6 +1,6 @@
 # dsh-sidebar-row-menu
 
-<img src="assets/icon-180.png" width="96" align="right" alt="Plugin icon" />
+<img src="https://raw.githubusercontent.com/TLEWA/dsh-sidebar-row-menu/main/assets/icon-180.png" width="96" align="right" alt="Plugin icon" />
 
 [![CI](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/ci.yml)
 [![Release](https://github.com/TLEWA/dsh-sidebar-row-menu/actions/workflows/release.yml/badge.svg)](https://github.com/TLEWA/dsh-sidebar-row-menu/releases)
@@ -73,7 +73,33 @@ Requirements:
 - Windows PowerShell 5.1+;
 - Row components from the `0.2.1-rc.5` generation (see [Compatibility](#compatibility)).
 
-### Install from GitHub (recommended)
+### Install from npm (recommended)
+
+The package is published to the npm registry, and DSH's plugin installer can
+resolve it directly by name:
+
+1. Open **Plugins** in the sidebar → **Install plugin**;
+2. Enter the package name and confirm:
+
+   ```
+   dsh-sidebar-row-menu
+   ```
+
+3. Hard-refresh (`Ctrl+Shift+R`); restart the desktop app if the host half is not active.
+
+Pin a version by appending it to the name:
+
+```
+dsh-sidebar-row-menu@1.3.3
+```
+
+Equivalent command line:
+
+```powershell
+dsh plugin --profile desktop add dsh-sidebar-row-menu@1.3.3
+```
+
+### Install from GitHub
 
 DSH Desktop installs Git dependencies through pnpm. The `lib/` directory in this
 repository is already runnable, so **no local build is required**.
@@ -90,13 +116,13 @@ repository is already runnable, so **no local build is required**.
 That URL tracks the latest commit on `main`. Pin a tag for a stable version:
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.2
+https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.3
 ```
 
 Or install the tarball built by Actions directly, without Git:
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.2/dsh-sidebar-row-menu-1.3.2.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.3/dsh-sidebar-row-menu-1.3.3.tgz
 ```
 
 Equivalent command line:
@@ -175,10 +201,10 @@ repository itself is untouched.
 > as relative to the profile, and cross-drive paths produce broken links. The
 > script exists to avoid exactly that.
 
-### Switching from the script install to the GitHub install
+### Switching from the script install to a pnpm install (npm / GitHub)
 
-If you installed the development copy with `scripts/install.ps1` and then paste
-the GitHub URL into the Plugins page, pnpm may fail with:
+If you installed the development copy with `scripts/install.ps1` and then enter
+the npm package name or the GitHub URL into the Plugins page, pnpm may fail with:
 
 ```
 [ERR_PNPM_EPERM] [importPackage ...\node_modules\dsh-sidebar-row-menu]
@@ -203,7 +229,7 @@ cmd /c rmdir "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-sidebar-ro
 ```
 
 A fresh profile never hits this; it only affects the "script install, then
-GitHub install" transition.
+pnpm install (npm or GitHub)" transition.
 
 ## Development
 

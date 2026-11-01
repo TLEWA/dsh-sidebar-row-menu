@@ -42,11 +42,11 @@
 ## 安装
 
 要求：DSH 桌面版（或 `dsh web`）已经至少启动过一次，profile 目录存在；
-PowerShell 7+。
+Windows PowerShell 5.1+。
 
 ```powershell
 cd C:\Users\TLEWA\Desktop\SideBar
-pwsh -NoProfile -File .\scripts\install.ps1
+powershell -NoProfile -File .\scripts\install.ps1
 ```
 
 脚本做四件事（不依赖 pnpm）：
@@ -60,19 +60,31 @@ pwsh -NoProfile -File .\scripts\install.ps1
 默认安装到 `desktop`，也可以：
 
 ```powershell
-pwsh -NoProfile -File .\scripts\install.ps1 -Profile both
-pwsh -NoProfile -File .\scripts\install.ps1 -Profile 'C:\Users\TLEWA\.dsh\profiles\web'
+powershell -NoProfile -File .\scripts\install.ps1 -Profile both
+powershell -NoProfile -File .\scripts\install.ps1 -Profile 'C:\Users\TLEWA\.dsh\profiles\web'
 ```
 
 安装完：
 
-- **宿主半边**（`lib/index.js`，提供 `/dsh-sidebar-row-menu/open`）需要重启桌面应用；
-- **客户端半边**（`lib/client.js`）硬刷新（Ctrl+Shift+R）即可。
+- 先硬刷新界面（`Ctrl+Shift+R`）；客户端半边会在控制台打印
+  `[dsh-sidebar-row-menu] installed`；
+- 若右键没有任何反应，再重启桌面应用，让宿主半边和 bundle 树一起重新装载。
+
+自检：
+
+```powershell
+# 宿主路由应返回 400 bad-target，说明插件已装载
+curl.exe -X POST http://127.0.0.1:10102/dsh-sidebar-row-menu/open `
+  -H 'content-type: application/json' -d '{"target":"nope","path":"x"}'
+```
+
+然后在侧边栏分别右键一个工作区行和它下面的会话行：菜单应贴着鼠标弹出，样式与
+内置「…」菜单一致；`Esc`、点空白处都能关闭。
 
 卸载：
 
 ```powershell
-pwsh -NoProfile -File .\scripts\install.ps1 -Uninstall
+powershell -NoProfile -File .\scripts\install.ps1 -Uninstall
 ```
 
 只移除两个目录联接、依赖项和 bundle 条目，不碰仓库本身。
@@ -88,8 +100,10 @@ npm run test:local  # 受限终端 / 沙箱：--test-isolation=none，同进程�
 ```
 
 测试覆盖宿主侧纯函数（路径校验、`vscode://file` 编码、loopback 判定、路由状态码）
-和客户端模块外壳（模块 id、导出、依赖白名单、监听器安装/卸载）。右键菜单本身依赖
-真实 fiber 与服务，需要在运行中的 GUI 里做人工/浏览器验证。
+和客户端模块（模块 id、导出、依赖白名单、监听器安装/卸载），并用伪造的
+`__reactFiber$`、DOM 与 `Menu` 宿主做菜单级集成测试：工作区 / 会话右键后的菜单项
+顺序、重命名回调、复制 ID / 链接、剪贴板内容都在断言里。真实 fiber 与服务仍需在
+运行中的 GUI 里做人工验证。
 
 目录：
 

@@ -31,9 +31,9 @@
   the repository or any real directory.
 
 .EXAMPLE
-  pwsh -NoProfile -File .\scripts\install.ps1
-  pwsh -NoProfile -File .\scripts\install.ps1 -Profile both
-  pwsh -NoProfile -File .\scripts\install.ps1 -Uninstall
+  powershell -NoProfile -File .\scripts\install.ps1
+  powershell -NoProfile -File .\scripts\install.ps1 -Profile both
+  powershell -NoProfile -File .\scripts\install.ps1 -Uninstall
 #>
 [CmdletBinding()]
 param(

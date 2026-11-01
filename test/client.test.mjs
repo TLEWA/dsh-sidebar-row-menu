@@ -67,7 +67,10 @@ function makeRequire(seen, roots, clipboard) {
     seen.push(id);
     switch (id) {
       case 'react':
-        return { useCallback: (fn) => fn };
+        return {
+          useCallback: (fn) => fn,
+          useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+        };
       case 'react/jsx-runtime':
         return { jsx: (type, props) => ({ type, props }) };
       case 'react-dom/client':
@@ -189,18 +192,31 @@ test('apply installs the capture listener and registers session menu entries', (
 test('session menu contribution copies the deep link and closes the menu', async () => {
   const roots = [];
   const clipboard = [];
-  const { registration } = loadClient();
+  const { registration, listeners } = loadClient();
   const exported = registration.factory(makeRequire([], roots, clipboard));
   const ctx = makeCtx();
   exported.apply(ctx);
 
   const link = ctx.slots.registrations.find((entry) => entry.spec.id === 'row-menu-copy-link');
   const closed = [];
-  const element = link.Component({
+  const render = () => link.Component({
     sessionId: 's1',
     useMenuOpenState: () => [true, (value) => closed.push(value)],
     t: (key) => key,
   });
+
+  // 点「…」打开的菜单里不显示插件条目。
+  assert.equal(render(), null);
+
+  // 右键之后打开的菜单里才显示。
+  const listener = listeners[listeners.length - 1].listener;
+  fireContextMenu(listener, makeRowTarget(
+    'session:s1',
+    { node: { id: 's1', title: 'Session 1', blank: false, updatedAt: 1 }, onRenameRequest: () => {} },
+    { open: false, anchor: { props: { onClick: () => {} } } },
+  ));
+
+  const element = render();
   assert.equal(element.type.name, 'MenuItemButton');
   element.props.onSelect();
   await new Promise((resolve) => setTimeout(resolve, 0));

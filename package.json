@@ -1,8 +1,8 @@
 {
   "name": "dsh-sidebar-row-menu",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "module",
-  "description": "DSH plugin: official-style right-click menus for workspace rows; session rows open the native slot-composed menu (built-in and third-party actions included), with VS Code / File Explorer / copy-link entries contributed back to that slot.",
+  "description": "DSH 侧边栏右键菜单：工作区行自组菜单，会话行在指针处展开内置 slot 菜单并追加本插件条目。",
   "keywords": [
     "deepseek",
     "dsh",

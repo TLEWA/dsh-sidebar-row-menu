@@ -15,7 +15,7 @@
 | 许可证 | MIT |
 | 分类 | `ui` |
 | 图标 | `assets/icon-180.png`（180×180 PNG，GitHub 托管） |
-| 预构建包 | Release `v1.3.2` 的 `.tgz`，条目里按 tag 固定 |
+| 预构建包 | Release 里的无版本号 `dsh-sidebar-row-menu.tgz`（`latest/download/` 别名） |
 | `dsh-plugin` topic | **待添加**（见下方第 1 步） |
 | 仓库创建时间 | `2026-11-01T18:06:42Z` |
 | 可提交时间 | `2026-11-02T18:06:42Z`，即 **2026-11-03 02:06（北京时间）** |
@@ -48,13 +48,9 @@ npm run marketplace:check -- --offline   # 只查本地文件
 - `category: ui`：插件只改侧边栏行的右键交互，不涉及模型、会话存储或工具协议。
 - 描述只写实际存在的行为：工作区/会话行的指针处右键菜单，以及在 VS Code、
   资源管理器中打开、复制路径、复制会话链接。没有写“多少个功能”这类数字。
-- `tarball` 固定到 `v1.3.2` 的 release asset，避免 `latest/download/` 在下次发版后
-  因文件名带版本号而 404。后续 release 如果同时上传不带版本号的
-  `dsh-sidebar-row-menu.tgz`，可以改成：
-
-  ```yaml
-  tarball: https://github.com/TLEWA/dsh-sidebar-row-menu/releases/latest/download/dsh-sidebar-row-menu.tgz
-  ```
+- `tarball` 使用 `latest/download/` + 不带版本号的文件名，因此不会在下次发版后因
+  文件名变化而 404；release 工作流会同时上传带版本号和不带版本号的两份资产。
+  注意：`latest` 指向按发布时间最新的 release，仓库不要随意把旧 release 标成 latest。
 
 - 没有声明 `screenshots.json`：目前没有可用的真实界面截图，市场会回退到从
   README 抽取图片；等有截图后再加，不伪造截图。

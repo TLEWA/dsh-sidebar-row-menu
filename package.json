@@ -1,8 +1,8 @@
 {
   "name": "dsh-sidebar-row-menu",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "type": "module",
-  "description": "DSH 侧边栏右键菜单：工作区行自组菜单，会话行在指针处展开内置 slot 菜单并追加本插件条目。",
+  "description": "DSH sidebar right-click menus: a self-composed menu for workspace rows, and the native slot menu opened at the pointer for session rows.",
   "keywords": [
     "deepseek",
     "dsh",
@@ -30,8 +30,12 @@
     "lib",
     "cordis.patch.yml",
     "README.md",
+    "README.en.md",
     "LICENSE",
-    "NOTICE.md"
+    "NOTICE.md",
+    "NOTICE.en.md",
+    "AI_USAGE.md",
+    "AI_USAGE.en.md"
   ],
   "dsh": {
     "bundle": {
@@ -50,6 +54,7 @@
   },
   "scripts": {
     "test": "node --test test/host.test.mjs test/client.test.mjs",
-    "test:local": "node --test --test-isolation=none test/host.test.mjs test/client.test.mjs"
+    "test:local": "node --test --test-isolation=none test/host.test.mjs test/client.test.mjs",
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js"
   }
 }

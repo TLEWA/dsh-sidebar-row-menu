@@ -1,6 +1,9 @@
-# NOTICE
+# NOTICE / 第三方声明
 
-`dsh-sidebar-row-menu` 是在两个现有 DSH 插件的实现经验上重写的，部分代码直接改编自它们：
+[简体中文](NOTICE.md) · [English](NOTICE.en.md)
+
+`dsh-sidebar-row-menu`（MIT）在实现过程中参考并改编了两个现有 DSH 插件的代码。
+下列版权与许可条件适用于被改编的部分；其余代码版权归本项目贡献者所有。
 
 ## dsh-sidebar-context-menu
 
@@ -8,9 +11,11 @@
 - 版本：0.2.0
 - 许可证：MIT
 - 仓库：https://github.com/miao-ge/dsh-sidebar-context-menu
-- 复用范围：宿主半边 `lib/index.js` 的 loopback 围栏、JSON 读取、detached spawn、
-  VS Code 启动器探测与 `vscode://file` 编码；客户端半边的 fiber 解析、官方 `Menu`
-  挂载、toast、`contextmenu` 捕获安装方式。
+- 复用范围：
+  - 宿主：loopback 围栏、JSON 请求体读取、detached spawn、VS Code 启动器探测、
+    `vscode://file` 编码（现拆分在 `lib/host/security.js`、`lib/host/launch.js`、
+    `lib/host/paths.js`、`lib/host/route.js`）；
+  - 客户端：fiber 解析、官方 `Menu` 挂载、toast、`contextmenu` 捕获安装方式。
 
 ## dsh-workspace-menu
 
@@ -18,7 +23,20 @@
 - 版本：2.0.3
 - 许可证：BSD-3-Clause
 - 复用范围：客户端服务调用方式（`ctx.uiWorkspace` 的 pin / archive / unarchive /
-  fork / openSession）与会话深链接 `?session=<id>` 的构造方式。
+  fork / openSession）与会话深链接 `?session=<id>` 的构造方式。v1.1 起会话动作
+  改为官方 slot 条目，不再直接调用这些服务，但设计仍受其启发。
+
+## DeepSeek Harness 内置包
+
+本项目通过阅读 DSH 客户端内置包（`@deepseek-ai/dsh-client-ui-workspace`、
+`@deepseek-ai/dsh-client-ui-renderer` 等，版本 `0.2.1-rc.5`）的公开接口与类型来对接
+slot、`Menu` 和行组件 props。**没有复制其源代码**；内置包的版权归 DeepSeek 所有，
+其许可不因本项目的 MIT 许可而改变。
+
+## AI 辅助说明
+
+本项目的代码与文档在 AI 辅助下完成，范围、验证方式与免责声明见
+[AI_USAGE.md](AI_USAGE.md)。
 
 ---
 

@@ -1,16 +1,18 @@
 # dsh-sidebar-row-menu
 
-给 DeepSeek Harness（DSH）左侧边栏加右键菜单：
+[简体中文](README.md) · [English](README.en.md)
 
-- **工作区行**：右键即弹菜单（复刻 `dsh-sidebar-context-menu` 的能力）；
-- **工作区下层的会话行**：右键同样弹菜单，把同一套能力延伸到每一段对话。
+给 [DeepSeek Harness](https://github.com/deepseek-ai)（DSH）左侧边栏加右键菜单：
 
-菜单用 DSH 官方的 `Menu` 组件渲染，视觉、定位、键盘导航和“点外部关闭”都与内置
-「…」菜单一致。工作区菜单由本插件组项；会话行右键则**在鼠标位置展开该行内置的「…」
-菜单**，内容来自 `sidebar.workspaces.session.menu.item` slot —— 内置动作和其他插件的
-动作都在里面，本插件只追加自己的条目，不复制、不硬编码任何内置动作。
+- **工作区行**：右键弹出菜单（复刻 `dsh-sidebar-context-menu` 的能力）；
+- **工作区下层的会话行**：右键在指针处展开该行内置的「…」菜单，并追加本插件的条目。
 
-点行尾「…」按钮看到的菜单保持原样；本插件自己的三个条目只在右键展开时出现。
+菜单使用 DSH 官方的 `Menu` 组件渲染，视觉、定位、键盘导航和“点外部关闭”都与内置
+「…」菜单一致。工作区菜单由本插件组项；会话菜单的内容来自
+`sidebar.workspaces.session.menu.item` slot —— 内置动作和其他插件的动作都在里面，
+本插件只追加自己的条目，不复制、不硬编码任何内置动作。
+
+> 点行尾「…」按钮看到的菜单保持 DSH 原样；本插件自己的三个条目只在右键展开时出现。
 
 ## 功能
 
@@ -26,10 +28,9 @@
 | 在新标签中打开 | 仅在装有 `dsh-project-tabs`（暴露 `openWorkspaceInTab`）时出现 |
 | 删除工作区 | 打开官方删除确认对话框 |
 
-### 会话行右键（在指针处展开官方「…」菜单）
+### 会话行右键
 
-右键会话行不会另起一套菜单，而是展开该行自己的「…」菜单，所以菜单内容随已安装的
-插件变化：
+右键会话行不会另起一套菜单，而是展开该行自己的「…」菜单：
 
 | 来源 | 条目 |
 | --- | --- |
@@ -45,19 +46,23 @@
 | 在资源管理器中打开 | 同上 |
 | 复制会话链接 | 复制 `?session=<id>` 深链接 |
 
-这三条是**右键专属**：点行尾「…」按钮时它们不挂载，按钮菜单保持 DSH 原样。实现上用
-一个只在右键展开瞬间有效的窗口标记，窗口外的渲染直接返回 `null`。
+这三条是**右键专属**：点行尾「…」按钮时它们不挂载。实现上使用一个只在右键展开瞬间
+有效的窗口标记，窗口外的渲染直接返回 `null`。
 
 草稿会话（还没有任何消息的空白会话）没有内置「…」菜单，本插件同样不接管。
 非工作区 / 非会话的侧边栏行（如“显示更多”）也不会被拦截。
 
 ## 安装
 
-要求：DSH 桌面版（或 `dsh web`）已经至少启动过一次，profile 目录存在；
-Windows PowerShell 5.1+。
+要求：
+
+- DSH 桌面版（或 `dsh web`）已经至少启动过一次，profile 目录存在；
+- Windows PowerShell 5.1+；
+- 与 DSH 客户端内置包 `0.2.1-rc.5` 同代的行组件（见[兼容性](#兼容性)）。
 
 ```powershell
-cd C:\Users\TLEWA\Desktop\SideBar
+git clone <this-repo> dsh-sidebar-row-menu
+cd dsh-sidebar-row-menu
 powershell -NoProfile -File .\scripts\install.ps1
 ```
 
@@ -73,7 +78,7 @@ powershell -NoProfile -File .\scripts\install.ps1
 
 ```powershell
 powershell -NoProfile -File .\scripts\install.ps1 -Profile both
-powershell -NoProfile -File .\scripts\install.ps1 -Profile 'C:\Users\TLEWA\.dsh\profiles\web'
+powershell -NoProfile -File .\scripts\install.ps1 -Profile 'C:\Users\<you>\.dsh\profiles\web'
 ```
 
 安装完：
@@ -82,10 +87,9 @@ powershell -NoProfile -File .\scripts\install.ps1 -Profile 'C:\Users\TLEWA\.dsh\
   `[dsh-sidebar-row-menu] installed`；
 - 若右键没有任何反应，再重启桌面应用，让宿主半边和 bundle 树一起重新装载。
 
-自检：
+自检（宿主路由应返回 `400 bad-target`）：
 
 ```powershell
-# 宿主路由应返回 400 bad-target，说明插件已装载
 curl.exe -X POST http://127.0.0.1:10102/dsh-sidebar-row-menu/open `
   -H 'content-type: application/json' -d '{"target":"nope","path":"x"}'
 ```
@@ -120,11 +124,15 @@ npm run test:local  # 受限终端 / 沙箱：--test-isolation=none，同进程�
 目录：
 
 ```
-lib/index.js         宿主半边：/open 路由、VS Code / 资源管理器启动、loopback 围栏
-lib/client.js        客户端半边：fiber 解析、slot 注册、工作区菜单、会话菜单展开
-cordis.patch.yml     bundle patch：把插件插进 profile 插件树
-scripts/install.ps1  无 pnpm 的安装 / 卸载脚本
-test/*.test.mjs      node:test
+lib/index.js          宿主入口：name / inject / apply，再导出可测试的纯函数
+lib/host/security.js  loopback 请求围栏
+lib/host/paths.js     路径校验、vscode://file 编码
+lib/host/launch.js    VS Code / 资源管理器启动
+lib/host/route.js     /open 路由与 HTTP 状态码
+lib/client.js         客户端半边：fiber 解析、slot 注册、菜单挂载
+cordis.patch.yml      bundle patch：把插件插进 profile 插件树
+scripts/install.ps1   无 pnpm 的安装 / 卸载脚本
+test/*.test.mjs       node:test
 ```
 
 ## 实现说明
@@ -188,25 +196,29 @@ test/*.test.mjs      node:test
   都找不到时退回 `rundll32` 打开 `vscode://file/...`；
 - spawn 用 `detached + stdio:'ignore'`，不设 `windowsHide`（否则资源管理器窗口会被隐藏）。
 
+## 兼容性
+
+按 DSH 客户端 `0.2.1-rc.5` 的 `ProjectRowItem` / `SessionNodeItem` / `Menu` 实现。
+DSH 升级若改动行组件或菜单定位实现：
+
+- 工作区右键会静默不弹（不会报错、不影响原界面）；
+- 会话右键会退回行尾「…」按钮旁，内容仍然正确。
+
 ## 已知限制
 
-- 依赖 DSH 内置行组件的 props 形状（按 `0.2.1-rc.5` 的 `ProjectRowItem` /
-  `SessionNodeItem` 实现）。DSH 升级若改了这两个组件，右键会静默不弹（不会报错、
-  不影响原界面）。
+- 依赖 DSH 内置行组件的 props 形状。DSH 升级若改了这两个组件，右键会静默不弹。
 - 会话右键依赖行内 `Menu` 组件仍在 fiber 子树里。找不到时退回点击行内操作区的
   省略号按钮，再找不到就放弃 —— 不会自建菜单，也不会误触行的打开动作。
-- 会话右键通过临时改写锚点 rect 把官方菜单“搬”到指针处；DSH 若换掉这套 Menu 的定位
-  实现，菜单会退回省略号按钮旁，但仍能打开且内容正确。
 - 本插件不提供会话“删除”：DSH 官方只支持归档，归档后可恢复；强行删记录容易留下
   孤儿数据。会话的归档 / 取消归档由内置菜单条目负责。
 - 会话行右键的 VS Code / 资源管理器目录来自 `sessions.list` 的 `cwd`，取不到时退回
   所属工作区目录；未分组会话可能没有目录，此时会提示“没有可用的目录路径”。
 
-## 许可
+## 许可与声明
 
-MIT。部分实现改编自：
+- 代码：[MIT](LICENSE)。
+- 第三方代码引用与许可证全文：[NOTICE.md](NOTICE.md) · [English](NOTICE.en.md)。
+- AI 使用与代码来源声明：[AI_USAGE.md](AI_USAGE.md) · [English](AI_USAGE.en.md)。
 
-- [dsh-sidebar-context-menu](https://github.com/miao-ge/dsh-sidebar-context-menu)（MIT, miao-ge）
-- dsh-workspace-menu（BSD-3-Clause, @0imzero）
-
-完整声明与许可证文本见 [NOTICE.md](./NOTICE.md)。
+本项目允许用于商业与非商业场景，但按 MIT 条款**不提供任何担保**；AI 辅助生成的
+代码请在采用前自行审查。

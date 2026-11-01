@@ -91,6 +91,12 @@ That URL tracks the latest commit on `main`. Pin a tag for a stable version:
 https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.2
 ```
 
+Or install the tarball built by Actions directly, without Git:
+
+```
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.2/dsh-sidebar-row-menu-1.3.2.tgz
+```
+
 Equivalent command line:
 
 ```powershell

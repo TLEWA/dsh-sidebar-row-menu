@@ -84,6 +84,12 @@ DSH 桌面端通过 pnpm 安装 Git 依赖；本仓库的 `lib/` 已是可直接
 https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.2
 ```
 
+也可以直接安装 Actions 打出的压缩包（不经过 Git）：
+
+```
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.2/dsh-sidebar-row-menu-1.3.2.tgz
+```
+
 命令行等价写法：
 
 ```powershell

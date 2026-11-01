@@ -13,6 +13,9 @@ node_modules/
 # 插件市场提交材料只保留在本地，不随插件仓库发布
 marketplace/
 
+# meow-memory 在本工作区生成的本地记忆库
+.dsh-meow/
+
 # 编辑器 / 系统
 .DS_Store
 Thumbs.db

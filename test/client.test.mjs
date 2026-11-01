@@ -41,7 +41,18 @@ function loadClient() {
       };
     },
   };
-  vm.runInNewContext(source, { window, document, console, URL });
+  vm.runInNewContext(source, {
+    window,
+    document,
+    console,
+    URL,
+    PointerEvent: class PointerEvent {
+      constructor(type, init = {}) {
+        this.type = type;
+        Object.assign(this, init);
+      }
+    },
+  });
   assert.ok(registration, 'client.js must call window.__ModuleLoader__.load');
   return { registration, listeners, hosts, window, document };
 }
@@ -225,14 +236,14 @@ test('session menu contribution copies the deep link and closes the menu', async
 });
 
 /** Build a fake sidebar row carrying React fiber props. */
-function makeRowTarget(rowKey, props, menuProps = null) {
+function makeRowTarget(rowKey, props, menuProps = null, trigger = null) {
   const menuFiber = menuProps === null
     ? null
     : { memoizedProps: menuProps, child: null, sibling: null, return: null };
   const fiber = { memoizedProps: props, child: menuFiber, sibling: null, return: null };
   const row = {
     getAttribute: () => rowKey,
-    querySelector: () => null,
+    querySelector: (selector) => (trigger !== null && String(selector).includes('rowActions') ? trigger : null),
     __reactFiber$test: fiber,
   };
   return {
@@ -336,4 +347,35 @@ test('session row right-click opens the built-in slot-composed menu', () => {
   menuProps.open = true;
   fireContextMenu(listener, target);
   assert.equal(clicks.join(','), 'toggle');
+});
+
+test('session right-click primes row-action pointer listeners before opening the menu', () => {
+  const { registration, listeners } = loadClient();
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const events = [];
+  const trigger = {
+    dispatchEvent(event) {
+      events.push(`${event.type}:${event.pointerType}:${event.bubbles}`);
+      return true;
+    },
+  };
+  const menuProps = {
+    open: false,
+    anchor: { props: { onClick: () => events.push('toggle') } },
+  };
+  const props = {
+    node: { id: 's1', title: 'Session 1', blank: false, updatedAt: 1 },
+    onRenameRequest: () => {},
+  };
+  const target = makeRowTarget('session:s1', props, menuProps, trigger);
+
+  exported.apply(makeCtx());
+  const listener = listeners[listeners.length - 1].listener;
+  fireContextMenu(listener, target);
+
+  // pointerdown is emitted first so DOM-injecting menu extensions (meow-memory)
+  // can add their rows in the same frame instead of after their 120 ms debounce.
+  assert.equal(events.join(','), 'pointerdown:mouse:true,toggle');
+  assert.equal(roots.length, 0);
 });

@@ -82,13 +82,13 @@
 要固定版本，在包名后加版本号：
 
 ```
-dsh-sidebar-row-menu@1.3.3
+dsh-sidebar-row-menu@1.3.4
 ```
 
 命令行等价写法：
 
 ```powershell
-dsh plugin --profile desktop add dsh-sidebar-row-menu@1.3.3
+dsh plugin --profile desktop add dsh-sidebar-row-menu@1.3.4
 ```
 
 ### 从 GitHub 安装
@@ -108,13 +108,13 @@ DSH 桌面端通过 pnpm 安装 Git 依赖；本仓库的 `lib/` 已是可直接
 该地址跟随 `main` 的最新提交。要固定版本，在地址后加标签：
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.3
+https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.4
 ```
 
 也可以直接安装 Actions 打出的压缩包（不经过 Git）：
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.3/dsh-sidebar-row-menu-1.3.3.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.4/dsh-sidebar-row-menu-1.3.4.tgz
 ```
 
 命令行等价写法：

@@ -140,13 +140,13 @@ resolve it directly by name:
 Pin a version by appending it to the name:
 
 ```
-dsh-sidebar-row-menu@1.4.1
+dsh-sidebar-row-menu@1.4.2
 ```
 
 Equivalent command line:
 
 ```powershell
-dsh plugin --profile desktop add dsh-sidebar-row-menu@1.4.1
+dsh plugin --profile desktop add dsh-sidebar-row-menu@1.4.2
 ```
 
 ### Install from GitHub
@@ -166,13 +166,13 @@ repository is already runnable, so **no local build is required**.
 That URL tracks the latest commit on `main`. Pin a tag for a stable version:
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu#v1.4.1
+https://github.com/TLEWA/dsh-sidebar-row-menu#v1.4.2
 ```
 
 Or install the tarball built by Actions directly, without Git:
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.4.1/dsh-sidebar-row-menu-1.4.1.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.4.2/dsh-sidebar-row-menu-1.4.2.tgz
 ```
 
 Equivalent command line:

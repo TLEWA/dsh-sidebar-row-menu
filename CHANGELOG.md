@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Delete workspace and all sessions**: a new workspace row entry removes every
+  session transcript under the workspace first, then drops the workspace
+  registration. The built-in "Delete workspace" is unchanged and still keeps
+  sessions under "Ungrouped". If any session fails to delete, the workspace is kept
+  so the user can retry. Backed by a new `POST /dsh-sidebar-row-menu/workspace/delete`
+  route.
+- **Also show in the "…" menu**: every plugin right-click entry can now be added
+  individually to the row's native "…" menu (Settings → "Row menu" → "Also show in
+  the "…" menu"). Session entries mount through the existing session slot;
+  workspace entries make the plugin render the "…" menu with the official
+  Rename / Delete workspace items plus the enabled entries. All switches are off by
+  default, so the native menu is untouched until opted in.
+
+### 中文摘要
+
+- 工作区右键新增「删除工作区及所有会话」：先逐个永久删除会话日志，全部成功后再删除
+  工作区登记；任一会话失败则保留工作区便于重试。内置「删除工作区」行为不变（会话归入
+  「未分组」）。新增宿主路由 `POST /dsh-sidebar-row-menu/workspace/delete`。
+- 设置 →「行菜单」新增「同时放进「…」菜单」：可逐项把插件右键条目加进行尾「…」菜单。
+  会话条目走原生 slot；工作区开启任意一项后由插件接管「…」按钮，保留官方「重命名 /
+  删除工作区」。全部默认关闭，未开启时「…」菜单与 DSH 原样一致。
+
 ## 1.4.1 — 2026-11-03
 
 ### Added

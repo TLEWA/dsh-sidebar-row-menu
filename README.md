@@ -33,7 +33,8 @@
 | 打开方式 | 二级菜单列出宿主提供的外部应用（编辑器、终端、文件管理器）；与会话菜单共用同一套应用列表、置顶与开关设置，鼠标悬浮自动展开 |
 | 复制工作区路径 | 复制目录路径到剪贴板 |
 | 在新标签中打开 | 仅在装有 `dsh-project-tabs`（暴露 `openWorkspaceInTab`）时出现 |
-| 删除工作区 | 打开官方删除确认对话框 |
+| 删除工作区 | 打开官方删除确认对话框；只删除工作区登记，会话保留并归入「未分组」 |
+| 删除工作区及所有会话 | 先永久删除该工作区下的每个会话及其日志，全部成功后再删除工作区登记；任一会话删除失败则保留工作区，便于重试。工作区目录本身不删除 |
 
 ### 会话行右键
 
@@ -59,8 +60,12 @@
 一级菜单。两个删除入口由本插件自己的宿主路由完成，默认不会删除未归档会话；
 开启「允许删除未归档会话」后才会对普通会话开放。删除不会级联删除 fork 子会话。
 
-这些条目都是**右键专属**：点行尾「…」按钮时它们不挂载。实现上使用一个只在右键展开瞬间
+这些条目默认是**右键专属**：点行尾「…」按钮时它们不挂载。实现上使用一个只在右键展开瞬间
 有效的窗口标记，窗口外的渲染直接返回 `null`。
+
+如果想直接使用行尾「…」菜单，可以在设置 →「行菜单」→「同时放进「…」菜单」里逐个开启：
+会话条目会挂进原生「…」菜单；工作区行开启任意一项后，本插件会接管行尾「…」按钮，用同一套
+菜单展示官方「重命名 / 删除工作区」加上已开启的插件条目。全部关闭时「…」按钮保持 DSH 原样。
 
 草稿会话（还没有任何消息的空白会话）没有内置「…」菜单，本插件同样不接管。
 非工作区 / 非会话的侧边栏行（如“显示更多”）也不会被拦截。
@@ -76,9 +81,14 @@
 | 永久删除会话 | 关闭后会话菜单里不再出现单条删除入口 |
 | 允许删除未归档会话 | 默认关闭；开启后未归档会话的右键菜单也会出现「永久删除会话」，需先开启上一项 |
 | 删除所有已归档会话 | 关闭后不再出现批量删除入口 |
+| 同时放进「…」菜单 → 工作区 | 逐项把工作区行右键条目加进行尾「…」菜单：新会话、打开方式、复制工作区路径、在新标签中打开、删除工作区及所有会话。开启任意一项后「…」按钮改由本插件渲染 |
+| 同时放进「…」菜单 → 会话 | 逐项把会话行右键条目加进原生「…」菜单：打开方式、永久删除会话、删除所有已归档会话 |
+
+「同时放进「…」菜单」下的开关默认全部关闭，`…` 菜单在未开启时与 DSH 完全一致。
 
 开关存在浏览器 `localStorage`（`dsh.sidebar-row-menu.items.v1`、
-`dsh.sidebar-row-menu.open-with.v1` 与 `dsh.sidebar-row-menu.open-with.pinned.v1`），
+`dsh.sidebar-row-menu.open-with.v1`、`dsh.sidebar-row-menu.open-with.pinned.v1` 与
+`dsh.sidebar-row-menu.ellipsis.v1`），
 改完立即生效，不需要重启。置顶项在第一次配置前是自动推导的：优先置顶检测到的第一个
 编辑器（通常是 VS Code），没有编辑器时置顶应用列表里的第一个。
 
@@ -260,8 +270,9 @@ lib/index.js          宿主入口：name / inject / apply，再导出可测试�
 lib/host/security.js  loopback 请求围栏
 lib/host/paths.js     路径校验、vscode://file 编码
 lib/host/launch.js    VS Code / 资源管理器启动
-lib/host/route.js     /open 与 /session/delete 路由、HTTP 状态码
+lib/host/route.js     /open、/session/delete 与 /workspace/delete 路由、HTTP 状态码
 lib/host/session-delete.js 会话日志目录的校验与删除（detach / rm / 复查）
+lib/host/workspace-delete.js 删除工作区及其所有会话；会话失败时保留工作区
 lib/client.js         客户端半边：fiber 解析、slot 注册、菜单挂载
 cordis.patch.yml      bundle patch：把插件插进 profile 插件树
 scripts/install.ps1   无 pnpm 的安装 / 卸载脚本
@@ -340,6 +351,14 @@ test/*.test.mjs       node:test
 - 删除后 3 次复查目录没有复活，再清理 `workspaceRegistry` 的归档 / 置顶记录并发出
   `api-session/removed`；
 - 部分失败返回 `200` + `{ ok:false, deleted, failed, error }`，前端保留对话框并显示计数。
+
+`POST /dsh-sidebar-row-menu/workspace/delete`，body `{ workspaceId: string }`。
+
+- 同样的 loopback / POST / 64 KB body 校验；`workspaceId` 必须是非空字符串；
+- 先读取 `workspaceRegistry.get(workspaceId).sessionIds`，用上面的会话删除流程逐个永久删除；
+- 只有全部会话删除成功（包括本来就不存在的会话）才调用 `workspaceRegistry.delete()`；
+  任一会话失败返回 `200` + `ok:false` 并保留工作区，避免留下无人管理的「未分组」会话；
+- 未知工作区返回 `ok:true, missing:true`，不视为错误。
 
 「打开方式」不经过本插件宿主：直接调用 DSH 内置的 `open-in-app/apps`、
 `open-in-app/open`、`open-in-app/icon/<id>`。

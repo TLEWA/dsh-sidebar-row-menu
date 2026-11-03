@@ -87,7 +87,7 @@ function createRoute(services) {
 }
 
 /** Build a host ctx whose session services are scripted by the test. */
-function createDeleteContext({ headers = [], live, calls = [] }) {
+function createDeleteContext({ headers = [], live, calls = [], workspace } = {}) {
   let route;
   const ctx = {
     effect(fn) {
@@ -136,6 +136,14 @@ function createDeleteContext({ headers = [], live, calls = [] }) {
       }
       if (name === 'workspaceRegistry') {
         return {
+          get(id) {
+            calls.push(['workspaceGet', id]);
+            return workspace?.id === id ? workspace : undefined;
+          },
+          async delete(id) {
+            calls.push(['workspaceDelete', id]);
+            return true;
+          },
           async unarchiveSession(id) {
             calls.push(['unarchiveSession', id]);
           },
@@ -321,4 +329,96 @@ test('removeSessions filters, dedupes and reports already-missing sessions as su
 
   assert.deepEqual(result, { ok: true, deleted: 1, failed: 0, error: '' });
   assert.equal(existsSync(sessionDir), false);
+});
+
+const WORKSPACE_DELETE_URL = '/dsh-sidebar-row-menu/workspace/delete';
+
+test('workspace delete route rejects bad requests and unknown workspaces', async () => {
+  const bare = createRoute();
+  assert.equal((await call(bare, { url: WORKSPACE_DELETE_URL, body: { workspaceId: 'w1' } })).status, 503);
+
+  const { route } = createDeleteContext({ headers: [] });
+  assert.equal(
+    (await call(route, { url: WORKSPACE_DELETE_URL, body: { workspaceId: 'w1' }, remote: '10.0.0.5' })).status,
+    403,
+  );
+  assert.equal((await call(route, { url: WORKSPACE_DELETE_URL, body: { workspaceId: 'w1' }, method: 'GET' })).status, 405);
+  assert.equal((await call(route, { url: WORKSPACE_DELETE_URL, body: {} })).status, 400);
+  assert.equal((await call(route, { url: WORKSPACE_DELETE_URL, body: { workspaceId: '' } })).status, 400);
+  assert.equal((await call(route, { url: WORKSPACE_DELETE_URL, body: { workspaceId: 7 } })).status, 400);
+
+  // An unknown workspace is reported as a successful no-op.
+  const missing = await call(route, { url: WORKSPACE_DELETE_URL, body: { workspaceId: 'ghost' } });
+  assert.equal(missing.status, 200);
+  assert.equal(missing.body.ok, true);
+  assert.equal(missing.body.missing, true);
+});
+
+test('workspace delete route removes every session before dropping the workspace', async () => {
+  const first = seedSession('ws-session-1');
+  const second = seedSession('ws-session-2');
+  const calls = [];
+  const { route } = createDeleteContext({
+    headers: [
+      { id: 'ws-session-1', cwd: dir },
+      { id: 'ws-session-2', cwd: dir },
+    ],
+    calls,
+    workspace: { id: 'w1', title: 'Work', sessionIds: ['ws-session-1', 'ws-session-2'] },
+  });
+
+  const result = await call(route, {
+    url: WORKSPACE_DELETE_URL,
+    body: { workspaceId: 'w1' },
+    headers: { 'content-type': 'application/json' },
+  });
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(
+    { ok: result.body.ok, sessions: result.body.sessions, deleted: result.body.deleted, failed: result.body.failed, workspaceDeleted: result.body.workspaceDeleted },
+    { ok: true, sessions: 2, deleted: 2, failed: 0, workspaceDeleted: true },
+  );
+  assert.equal(existsSync(first), false);
+  assert.equal(existsSync(second), false);
+  assert.deepEqual(calls.at(-1), ['workspaceDelete', 'w1']);
+});
+
+test('workspace delete route keeps the workspace when a session fails to delete', async () => {
+  seedSession('ws-kept');
+  const calls = [];
+  const ctx = {
+    effect(fn) {
+      fn();
+      return () => {};
+    },
+    webServer: { register(value) { ctx.route = value; return () => {}; } },
+    logger: { warn() {} },
+    emit() {},
+    get(name) {
+      if (name === 'sessions') return { get: () => undefined };
+      if (name === 'sessionQuery') {
+        return { listSessions: async () => [{ header: { id: 'ws-kept', cwd: dir } }] };
+      }
+      if (name === 'sessionPersistence') {
+        return { root: '', locate: () => ({ path: join(dir, 'wrong-name', 'x.jsonl') }) };
+      }
+      if (name === 'workspaceRegistry') {
+        return {
+          get: () => ({ id: 'w1', title: 'Work', sessionIds: ['ws-kept'] }),
+          async delete(id) { calls.push(['workspaceDelete', id]); return true; },
+        };
+      }
+      return undefined;
+    },
+  };
+  apply(ctx);
+
+  const result = await call(ctx.route, { url: WORKSPACE_DELETE_URL, body: { workspaceId: 'w1' } });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, false);
+  assert.equal(result.body.code, 'batch-failed');
+  assert.equal(result.body.workspaceDeleted, false);
+  assert.deepEqual(calls, []);
+  assert.equal(existsSync(join(dir, 'ws-kept')), true);
 });

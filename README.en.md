@@ -39,7 +39,8 @@ or hardcode any built-in action.
 | Open with | A submenu of external apps (editors, terminals, file managers) sharing the session menu's catalog, pinning and toggles; hover expands it |
 | Copy workspace path | Copies the directory path |
 | Open in new tab | Only when `dsh-project-tabs` (exposing `openWorkspaceInTab`) is installed |
-| Delete workspace | Opens the official delete confirmation |
+| Delete workspace | Opens the official delete confirmation; removes only the workspace registration and leaves its sessions under "Ungrouped" |
+| Delete workspace and all sessions | Permanently deletes every session and transcript under the workspace first, then the workspace registration. If any session fails, the workspace is kept so the user can retry. The directory itself is not deleted |
 
 ### Session row
 
@@ -67,9 +68,16 @@ Both delete entries are served by this plugin's own host route. They leave
 unarchived sessions alone by default; the opt-in switch extends the single-session
 entry to them. Deletion never cascades into forked child sessions.
 
-These entries are **right-click only**: they do not mount when the "…" button opens
-the menu. A short-lived window flag is set before opening; outside that window the
-entries render `null`.
+These entries are **right-click only by default**: they do not mount when the "…"
+button opens the menu. A short-lived window flag is set before opening; outside that
+window the entries render `null`.
+
+To use them from the row's "…" button, enable them one by one under Settings →
+"Row menu" → "Also show in the "…" menu". Session entries mount into the native
+"…" menu; enabling any workspace entry makes this plugin take over the row's "…"
+button and render the official "Rename / Delete workspace" items alongside the
+enabled plugin entries. With everything off, the "…" button behaves exactly like
+DSH's own.
 
 Blank draft sessions have no native "…" menu and are left alone. Rows that are
 neither a workspace nor a session (e.g. "Show more") are not intercepted.
@@ -85,9 +93,15 @@ Settings → "Row menu" toggles every new entry:
 | Delete session | Hides the single-session delete entry in session menus |
 | Allow deleting unarchived sessions | Off by default; also shows "Delete session permanently" on unarchived rows. Requires the previous switch |
 | Delete all archived sessions | Hides the bulk-delete entry |
+| Also show in the "…" menu → workspace | Adds workspace right-click entries one by one to the row's "…" menu: New session, Open with, Copy workspace path, Open in new tab, Delete workspace and all sessions. Enabling any of them makes this plugin render the "…" menu |
+| Also show in the "…" menu → session | Adds session right-click entries one by one to the native "…" menu: Open with, Delete session, Delete all archived sessions |
+
+The "Also show in the "…" menu" switches are all off by default; until one is
+enabled the "…" menu is exactly DSH's own.
 
 Switches live in browser `localStorage` (`dsh.sidebar-row-menu.items.v1`,
-`dsh.sidebar-row-menu.open-with.v1` and `dsh.sidebar-row-menu.open-with.pinned.v1`)
+`dsh.sidebar-row-menu.open-with.v1`, `dsh.sidebar-row-menu.open-with.pinned.v1` and
+`dsh.sidebar-row-menu.ellipsis.v1`)
 and apply immediately. Before the first explicit pin, the plugin derives one: the
 first detected editor (usually VS Code), or the first catalog app when no editor
 exists.
@@ -290,8 +304,9 @@ lib/index.js          host entry: name / inject / apply plus re-exported helpers
 lib/host/security.js  loopback request fence
 lib/host/paths.js     path validation, vscode://file encoding
 lib/host/launch.js    VS Code / Explorer launching
-lib/host/route.js     /open and /session/delete routes, HTTP status codes
+lib/host/route.js     /open, /session/delete and /workspace/delete routes, HTTP status codes
 lib/host/session-delete.js transcript verification and deletion (detach / rm / re-check)
+lib/host/workspace-delete.js workspace + all sessions deletion, workspace kept on failure
 lib/client.js         browser half: fiber lookup, slot registration, menu mount
 cordis.patch.yml      bundle patch inserting the plugin into the profile tree
 scripts/install.ps1   pnpm-free install / uninstall
@@ -386,6 +401,16 @@ the row's existing menu.
   `api-session/removed` is emitted;
 - partial failures return `200` + `{ ok:false, deleted, failed, error }`; the dialog
   stays open and reports the counts.
+
+`POST /dsh-sidebar-row-menu/workspace/delete`, body `{ workspaceId: string }`.
+
+- same loopback / POST / 64 KB body checks; `workspaceId` must be a non-empty string;
+- reads `workspaceRegistry.get(workspaceId).sessionIds` and permanently deletes each
+  session with the flow above;
+- only when every session was deleted (including sessions that were already gone)
+  does it call `workspaceRegistry.delete()`; any failure returns `200` + `ok:false`
+  and keeps the workspace, so no orphaned "Ungrouped" sessions are left behind;
+- an unknown workspace returns `ok:true, missing:true` and is not an error.
 
 "Open with" does not touch this plugin's host: it calls DSH's built-in
 `open-in-app/apps`, `open-in-app/open` and `open-in-app/icon/<id>` directly.

@@ -36,8 +36,18 @@ function loadClient(stored = {}) {
     },
     setTimeout: () => 0,
   };
+  const documentListeners = [];
   const document = {
     body: { appendChild(el) { hosts.push(el); } },
+    addEventListener(type, listener, capture) {
+      documentListeners.push({ type, listener, capture });
+    },
+    removeEventListener(type, listener, capture) {
+      const index = documentListeners.findIndex(
+        (entry) => entry.type === type && entry.listener === listener && entry.capture === capture,
+      );
+      if (index >= 0) documentListeners.splice(index, 1);
+    },
     createElement(tag) {
       return {
         tag,
@@ -62,7 +72,7 @@ function loadClient(stored = {}) {
     },
   });
   assert.ok(registration, 'client.js must call window.__ModuleLoader__.load');
-  return { registration, listeners, hosts, window, document, storage };
+  return { registration, listeners, documentListeners, hosts, window, document, storage };
 }
 
 function makeRequire(seen, roots, clipboard) {
@@ -313,6 +323,105 @@ test('unarchived sessions get the delete entry only after opting in', () => {
   assert.equal(optedIn.props.children, 'deleteSession');
 });
 
+test('workspace ellipsis stays native until an entry is enabled', () => {
+  const { registration, documentListeners } = loadClient();
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  exported.apply(makeCtx());
+
+  const click = documentListeners.find((entry) => entry.type === 'click').listener;
+  assert.equal(typeof click, 'function');
+
+  const props = {
+    group: { key: 'w1', workspaceId: 'w1', label: 'Work', cwd: 'C:\\Work' },
+    actions: { rename: () => {}, delete: () => {} },
+    onCreate: () => {},
+  };
+  const target = makeRowTarget('workspace:w1', props);
+  let prevented = false;
+  const button = {
+    getAttribute: () => null,
+    getBoundingClientRect: () => ({ left: 100, top: 20, width: 24, height: 24, bottom: 44 }),
+  };
+  const row = target.row;
+  target.closest = (selector) => (selector === '[data-row-key]' ? row : selector === 'button' ? button : null);
+  row.contains = (value) => value === button;
+  row.querySelectorAll = () => [button, {}];
+
+  click({ defaultPrevented: false, button: 0, target, preventDefault: () => { prevented = true; }, stopPropagation: () => {} });
+
+  // No entry opted in: the click is left to the official menu.
+  assert.equal(prevented, false);
+  assert.equal(roots.length, 0);
+});
+
+test('workspace ellipsis menu only carries the enabled extras', () => {
+  const ELLIPSIS_KEY = 'dsh.sidebar-row-menu.ellipsis.v1';
+  const { registration, documentListeners } = loadClient({
+    [ELLIPSIS_KEY]: JSON.stringify({ deleteSessions: true }),
+  });
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  exported.apply(makeCtx());
+
+  const click = documentListeners.find((entry) => entry.type === 'click').listener;
+  const props = {
+    group: { key: 'w1', workspaceId: 'w1', label: 'Work', cwd: 'C:\\Work' },
+    actions: { rename: () => {}, delete: () => {} },
+    onCreate: () => {},
+  };
+  const target = makeRowTarget('workspace:w1', props);
+  let prevented = false;
+  const button = {
+    getAttribute: () => null,
+    getBoundingClientRect: () => ({ left: 100, top: 20, width: 24, height: 24, bottom: 44 }),
+  };
+  const row = target.row;
+  target.closest = (selector) => (selector === '[data-row-key]' ? row : selector === 'button' ? button : null);
+  row.contains = (value) => value === button;
+  row.querySelectorAll = () => [button, {}];
+
+  click({ defaultPrevented: false, button: 0, target, preventDefault: () => { prevented = true; }, stopPropagation: () => {} });
+
+  assert.equal(prevented, true);
+  const rows = workspaceRows(roots);
+  assert.equal(
+    rows.map((row) => row.props.key).join(','),
+    'rename,delete,delete-sessions',
+  );
+  assert.equal(rows.at(-1).props.danger, true);
+});
+
+test('session entries can be opted into the native ellipsis menu', () => {
+  const ELLIPSIS_KEY = 'dsh.sidebar-row-menu.ellipsis.v1';
+  const { registration } = loadClient({
+    [ELLIPSIS_KEY]: JSON.stringify({ sessionOpenWith: true }),
+  });
+  const exported = registration.factory(makeRequire([], [], []));
+  const ctx = makeCtx({
+    workspaces: {
+      list: {
+        getSnapshot: () => ({ archivedSessionIds: [] }),
+        subscribe: () => () => {},
+      },
+    },
+  });
+  exported.apply(ctx);
+
+  const entry = ctx.slots.registrations.find((candidate) => candidate.spec.id === 'row-menu-open-with');
+  assert.ok(entry);
+  const props = {
+    sessionId: 's1',
+    displayTitle: 'Session 1',
+    useMenuOpenState: () => [true, () => {}],
+    t: (key) => key,
+  };
+  // Outside a right-click window the entry is still mounted when opted in.
+  const rendered = entry.Component(props);
+  assert.notEqual(rendered, null);
+  assert.equal(rendered.type.name, 'OpenWithSubmenu');
+});
+
 test('workspace copy path reports through the official success toast', async () => {
   const roots = [];
   const clipboard = [];
@@ -411,7 +520,7 @@ test('workspace row opens the expected menu without touching unrelated rows', ()
   const rows = workspaceRows(roots);
   assert.equal(
     rows.map((row) => row.props.key).join(','),
-    ['new-session', 'rename', 'open-with', 'copy-path', 'delete'].join(','),
+    ['new-session', 'rename', 'open-with', 'copy-path', 'delete', 'delete-sessions'].join(','),
   );
   // 工作区菜单和会话菜单共用同一套「打开方式」二级菜单。
   assert.equal(rows.find((row) => row.props.key === 'open-with').type.name, 'OpenWithSubmenu');

@@ -12,12 +12,13 @@
 - **工作区行**：右键弹出菜单（复刻 `dsh-sidebar-context-menu` 的能力）；
 - **工作区下层的会话行**：右键在指针处展开该行内置的「…」菜单，并追加本插件的条目。
 
-菜单使用 DSH 官方的 `Menu` 组件渲染，视觉、定位、键盘导航和“点外部关闭”都与内置
-「…」菜单一致。工作区菜单由本插件组项；会话菜单的内容来自
+工作区菜单用 DSH 官方的 `MenuSurface` + `MenuItemButton` 自绘（官方 `Menu` 的条目不支持
+子菜单），视觉、行高、图标、危险色与分组分隔线都复用官方控件，键盘导航和“点外部关闭”
+与内置菜单一致。会话菜单的内容来自
 `sidebar.workspaces.session.menu.item` slot —— 内置动作和其他插件的动作都在里面，
 本插件只追加自己的条目，不复制、不硬编码任何内置动作。
 
-> 点行尾「…」按钮看到的菜单保持 DSH 原样；本插件自己的三个条目只在右键展开时出现。
+> 点行尾「…」按钮看到的菜单保持 DSH 原样；本插件自己的条目只在右键展开时出现。
 > 右键展开的菜单不会因为鼠标移出而关闭（与工作区右键一致），只有点击外部、选中条目或按 Esc 才关闭。
 
 ## 功能
@@ -28,8 +29,8 @@
 | --- | --- |
 | 新会话 | 展开该工作区并新建会话（等价于行尾 `+`） |
 | 重命名 | 打开官方“重命名工作区”对话框 |
-| 使用 VS Code 打开 | 宿主在新窗口打开该工作区目录 |
-| 在资源管理器中打开 | 宿主打开系统文件管理器 |
+| 置顶的打开方式 | 被置顶的应用直接显示在一级菜单（例如「用 Visual Studio Code 打开」），点击后用该应用打开工作区目录 |
+| 打开方式 | 二级菜单列出宿主提供的外部应用（编辑器、终端、文件管理器）；与会话菜单共用同一套应用列表、置顶与开关设置，鼠标悬浮自动展开 |
 | 复制工作区路径 | 复制目录路径到剪贴板 |
 | 在新标签中打开 | 仅在装有 `dsh-project-tabs`（暴露 `openWorkspaceInTab`）时出现 |
 | 删除工作区 | 打开官方删除确认对话框 |
@@ -42,20 +43,50 @@
 | --- | --- |
 | DSH 内置 | 重命名、分叉会话、置顶 / 取消置顶、归档 / 取消归档、复制 Session ID |
 | 其他插件 | 它们注册进 `sidebar.workspaces.session.menu.item` 的条目 |
-| 本插件 | 使用 VS Code 打开、在资源管理器中打开 |
+| 本插件 | 置顶的打开方式（一级）、打开方式（二级菜单）、永久删除会话 / 删除所有已归档会话（仅已归档会话显示） |
 
-本插件追加的两个条目：
+本插件追加的条目：
 
 | 菜单项 | 行为 |
 | --- | --- |
-| 使用 VS Code 打开 | 优先用会话自己的 `cwd`，取不到则用所属工作区目录 |
-| 在资源管理器中打开 | 同上 |
+| 打开方式 | 二级菜单列出宿主提供的外部应用（编辑器、终端、文件管理器），用会话自己的 `cwd` 打开；取不到时退回所属工作区目录 |
+| 置顶的打开方式 | 被置顶的应用直接显示在一级菜单（例如「用 Visual Studio Code 打开」）；未配置时自动置顶检测到的第一个编辑器，没有编辑器则置顶第一个应用。鼠标悬浮到「打开方式」会自动展开二级菜单 |
+| 永久删除会话 | 只在已归档会话的右键菜单里出现；确认后永久删除这一个会话及其日志，不可恢复 |
+| 删除所有已归档会话 | 只在已归档会话的右键菜单里出现；确认后永久删除全部已归档会话及其日志，不可恢复 |
 
-这两条是**右键专属**：点行尾「…」按钮时它们不挂载。实现上使用一个只在右键展开瞬间
+「打开方式」的应用列表来自 DSH 内置的 `open-in-app` 路由，与 DSH 自己的「打开方式」
+能力同源；应用名和图标都由本插件展示，可在设置里逐个隐藏，也可以把常用应用置顶到
+一级菜单。两个删除入口由本插件自己的宿主路由完成，不会删除未归档会话，
+也不级联删除 fork 子会话。
+
+这些条目都是**右键专属**：点行尾「…」按钮时它们不挂载。实现上使用一个只在右键展开瞬间
 有效的窗口标记，窗口外的渲染直接返回 `null`。
 
 草稿会话（还没有任何消息的空白会话）没有内置「…」菜单，本插件同样不接管。
 非工作区 / 非会话的侧边栏行（如“显示更多”）也不会被拦截。
+
+### 设置
+
+设置 →「行菜单」里可以开关本插件的每个新增项：
+
+| 开关 | 作用 |
+| --- | --- |
+| 打开方式 | 关闭后工作区 / 会话菜单里不再出现「打开方式」和置顶应用 |
+| 打开方式 → 应用 | 逐个隐藏应用；旁边的「置顶」按钮把应用移到一级菜单 |
+| 永久删除会话 | 关闭后已归档会话菜单里不再出现单条删除入口 |
+| 删除所有已归档会话 | 关闭后不再出现批量删除入口 |
+
+开关存在浏览器 `localStorage`（`dsh.sidebar-row-menu.items.v1`、
+`dsh.sidebar-row-menu.open-with.v1` 与 `dsh.sidebar-row-menu.open-with.pinned.v1`），
+改完立即生效，不需要重启。置顶项在第一次配置前是自动推导的：优先置顶检测到的第一个
+编辑器（通常是 VS Code），没有编辑器时置顶应用列表里的第一个。
+
+### 与 dsh-session-menu 共存
+
+同时安装 [`dsh-session-menu`](https://github.com/big-head-pigeon/dsh-session-menu) 时，
+本插件会在会话菜单 slot 里检测对方注册的 `session-menu-open-with` /
+`session-menu-delete` / `session-menu-delete-archived`，命中后自动隐藏自己的同名条目，设置页对应开关置灰并
+提示“已由 dsh-session-menu 提供”。不会改动对方的配置，也不要求对方做任何适配。
 
 ## 安装
 
@@ -81,13 +112,13 @@
 要固定版本，在包名后加版本号：
 
 ```
-dsh-sidebar-row-menu@1.3.5
+dsh-sidebar-row-menu@1.4.0
 ```
 
 命令行等价写法：
 
 ```powershell
-dsh plugin --profile desktop add dsh-sidebar-row-menu@1.3.5
+dsh plugin --profile desktop add dsh-sidebar-row-menu@1.4.0
 ```
 
 ### 从 GitHub 安装
@@ -107,13 +138,13 @@ DSH 桌面端通过 pnpm 安装 Git 依赖；本仓库的 `lib/` 已是可直接
 该地址跟随 `main` 的最新提交。要固定版本，在地址后加标签：
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.5
+https://github.com/TLEWA/dsh-sidebar-row-menu#v1.4.0
 ```
 
 也可以直接安装 Actions 打出的压缩包（不经过 Git）：
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.5/dsh-sidebar-row-menu-1.3.5.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.4.0/dsh-sidebar-row-menu-1.4.0.tgz
 ```
 
 命令行等价写法：
@@ -228,7 +259,8 @@ lib/index.js          宿主入口：name / inject / apply，再导出可测试�
 lib/host/security.js  loopback 请求围栏
 lib/host/paths.js     路径校验、vscode://file 编码
 lib/host/launch.js    VS Code / 资源管理器启动
-lib/host/route.js     /open 路由与 HTTP 状态码
+lib/host/route.js     /open 与 /session/delete 路由、HTTP 状态码
+lib/host/session-delete.js 会话日志目录的校验与删除（detach / rm / 复查）
 lib/client.js         客户端半边：fiber 解析、slot 注册、菜单挂载
 cordis.patch.yml      bundle patch：把插件插进 profile 插件树
 scripts/install.ps1   无 pnpm 的安装 / 卸载脚本
@@ -257,14 +289,16 @@ test/*.test.mjs       node:test
 每个条目只能渲染自己声明过的子 slot，第三方无法直接把手伸进别人的 slot 重新排版。
 
 因此会话行右键只做一件事：在行组件的 fiber 子树里找到那个 `Menu`，触发它 anchor
-（省略号按钮）的点击，展开的自然是同一份 slot 内容。本插件自己的三个动作也通过
+（省略号按钮）的点击，展开的自然是同一份 slot 内容。本插件自己的动作也通过
 `ctx.slots.inject` + `ctx.slots.register` 注册进去，所以：
 
 - 不依赖「分叉」「置顶」这些内置条目是否存在；
 - 内置或别的插件以后新增条目，右键菜单自动出现；
 - 不复制、不硬编码任何内置动作。
 
-工作区行没有这样的 slot，所以工作区菜单仍由本插件自己组项。
+工作区行没有这样的 slot，所以工作区菜单仍由本插件自己组项。官方 `Menu` 的
+`items` 只支持单层条目，无法表达子菜单，因此工作区菜单用 `MenuSurface` +
+`MenuItemButton` 自绘：行、图标、危险色和分隔线都复用官方控件，交互与官方菜单一致。
 
 ### 为什么会话菜单能贴着鼠标
 
@@ -274,13 +308,13 @@ test/*.test.mjs       node:test
 方法，不影响按钮菜单的默认位置。
 
 「…」按钮菜单与右键菜单共用同一个 `Menu` 实例和同一份 slot 内容，区别只在
-`rightClickMenuUntil` 窗口：本插件三条只在窗口内挂载，窗口随菜单关闭一并清零。
+`rightClickMenuUntil` 窗口：本插件条目只在窗口内挂载，窗口随菜单关闭一并清零。
 
 ### 为什么菜单是命令式挂载
 
 右键事件不是 React 渲染流的一部分。工作区菜单按需创建一个 `0×0`、
-`z-index:2147483647` 的容器，`createRoot` 渲染官方 `Menu`（`portal` + 显式
-`getAnchorRect` 钉在鼠标位置），关闭时 `unmount()` 并移除容器。会话菜单不挂载任何
+`z-index:2147483647` 的容器，`createRoot` 渲染自绘面板；面板挂载后量一次尺寸，
+再把左上角夹进视口，避免贴边时被裁掉。关闭时 `unmount()` 并移除容器。会话菜单不挂载任何
 新容器，只是打开行内已有的官方菜单。
 
 ### 宿主路由
@@ -296,6 +330,19 @@ test/*.test.mjs       node:test
   都找不到时退回 `rundll32` 打开 `vscode://file/...`；
 - spawn 用 `detached + stdio:'ignore'`，不设 `windowsHide`（否则资源管理器窗口会被隐藏）。
 
+`POST /dsh-sidebar-row-menu/session/delete`，body `{ sessionIds: string[] }`。
+
+- 同样的 loopback / POST / 路径 / 64 KB body 校验；`sessionIds` 必须是非空字符串数组，
+  最多 500 个；
+- 串行删除：先取消运行中的会话、detach 活会话，再按 `sessionPersistence.locate()` 找到
+  会话目录；目录 basename 必须与会话 id 完全一致，否则拒绝删除（防误删父目录）；
+- 删除后 3 次复查目录没有复活，再清理 `workspaceRegistry` 的归档 / 置顶记录并发出
+  `api-session/removed`；
+- 部分失败返回 `200` + `{ ok:false, deleted, failed, error }`，前端保留对话框并显示计数。
+
+「打开方式」不经过本插件宿主：直接调用 DSH 内置的 `open-in-app/apps`、
+`open-in-app/open`、`open-in-app/icon/<id>`。
+
 ## 兼容性
 
 按 DSH 客户端 `0.2.1-rc.5` 的 `ProjectRowItem` / `SessionNodeItem` / `Menu` 实现。
@@ -309,14 +356,16 @@ DSH 升级若改动行组件或菜单定位实现：
 - 依赖 DSH 内置行组件的 props 形状。DSH 升级若改了这两个组件，右键会静默不弹。
 - 会话右键依赖行内 `Menu` 组件仍在 fiber 子树里。找不到时退回点击行内操作区的
   省略号按钮，再找不到就放弃 —— 不会自建菜单，也不会误触行的打开动作。
-- 本插件不提供会话“删除”：DSH 官方只支持归档，归档后可恢复；强行删记录容易留下
-  孤儿数据。会话的归档 / 取消归档由内置菜单条目负责。
-- 会话行右键的 VS Code / 资源管理器目录来自 `sessions.list` 的 `cwd`，取不到时退回
+- 永久删除只对**已归档**会话开放；未归档会话仍只能用内置的归档 / 取消归档。删除不会
+  级联删除 fork 出来的子会话，需要时请分别删除。
+- 删除操作直接作用于会话日志目录，宿主没有回收站；确认框里已明确提示不可恢复。
+- 会话行「打开方式」的目录来自 `sessions.list` 的 `cwd`，取不到时退回
   所属工作区目录；未分组会话可能没有目录，此时会提示“没有可用的目录路径”。
 
 ## 许可与声明
 
 - 代码：[MIT](LICENSE)。
+- 更新日志：[CHANGELOG.md](CHANGELOG.md)。
 - 第三方代码引用与许可证全文：[NOTICE.md](NOTICE.md) · [English](NOTICE.en.md)。
 - AI 使用与代码来源声明：[AI_USAGE.md](AI_USAGE.md) · [English](AI_USAGE.en.md)。
 

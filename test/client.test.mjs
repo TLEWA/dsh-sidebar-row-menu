@@ -80,8 +80,13 @@ function makeRequire(seen, roots, clipboard) {
     switch (id) {
       case 'react':
         return {
+          Fragment: function Fragment() {},
           useCallback: (fn) => fn,
+          useEffect: () => {},
+          useLayoutEffect: () => {},
+          useRef: (value) => ({ current: value ?? null }),
           useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+          useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
         };
       case 'react/jsx-runtime':
         return { jsx: (type, props) => ({ type, props }) };
@@ -184,21 +189,73 @@ test('apply installs the capture listener and registers session menu entries', (
 
   // Right-click must not hardcode built-in actions: the only session entries are ours,
   // contributed through the same slot the built-in "..." menu renders.
-  assert.equal(
-    ctx.slots.registrations.map((entry) => entry.spec.id).join(','),
-    'row-menu-vscode,row-menu-explorer',
+  const sessionEntries = ctx.slots.registrations.filter(
+    (entry) => entry.spec.name === 'sidebar.workspaces.session.menu.item',
   );
-  for (const entry of ctx.slots.registrations) {
-    assert.equal(entry.spec.name, 'sidebar.workspaces.session.menu.item');
+  assert.equal(
+    sessionEntries.map((entry) => entry.spec.id).join(','),
+    'row-menu-open-with-pinned,row-menu-open-with,row-menu-delete-session,row-menu-delete-archived',
+  );
+  for (const entry of sessionEntries) {
     assert.equal(entry.spec.locale, 'sidebar-row-menu');
   }
   assert.deepEqual(
-    ctx.slots.registrations.map((entry) => entry.spec.order),
-    [500, 510],
+    sessionEntries.map((entry) => entry.spec.order),
+    [495, 500, 510, 520],
   );
+
+  // New capabilities are configurable and the delete confirmation has an overlay host.
+  const settings = ctx.slots.registrations.find((entry) => entry.spec.name === 'settings.section');
+  assert.ok(settings, 'settings.section must be registered');
+  assert.equal(settings.spec.id, 'sidebar-row-menu');
+  assert.equal(settings.spec.locale, 'sidebar-row-menu');
+  const overlay = ctx.slots.registrations.find((entry) => entry.spec.name === 'shell.overlay');
+  assert.ok(overlay, 'the delete dialog must live on shell.overlay');
+  assert.equal(overlay.spec.id, 'sidebar-row-menu-delete-dialog');
 
   for (const dispose of cleanups) dispose();
   assert.equal(listeners.length, 0);
+});
+
+test('session entries disappear when dsh-session-menu already provides them', () => {
+  const { registration, listeners } = loadClient();
+  const exported = registration.factory(makeRequire([], [], []));
+  const ctx = makeCtx();
+  const registrations = [];
+  const foreign = new Set(['session-menu-open-with', 'session-menu-delete-archived']);
+  ctx.slots = {
+    entriesOfSlot() {
+      return [...foreign].map((id) => ({ options: { id } }));
+    },
+    inject(_name, generator) {
+      const iterator = generator();
+      let step = iterator.next();
+      while (!step.done) step = iterator.next();
+      return () => {};
+    },
+    register(spec, Component) {
+      registrations.push({ spec, Component });
+      return () => {};
+    },
+  };
+  exported.apply(ctx);
+
+  const menuProps = {
+    open: false,
+    anchor: { props: { onClick: () => {} } },
+  };
+  const target = makeRowTarget(
+    'session:s1',
+    { node: { id: 's1', title: 'Session 1', blank: false }, onRenameRequest: () => {} },
+    menuProps,
+  );
+  fireContextMenu(listeners[listeners.length - 1].listener, target);
+
+  const t = (key) => key;
+  const openWith = registrations.find((entry) => entry.spec.id === 'row-menu-open-with');
+  const deleteArchived = registrations.find((entry) => entry.spec.id === 'row-menu-delete-archived');
+  assert.equal(openWith.Component({ sessionId: 's1', displayTitle: 'Session 1', useMenuOpenState: () => [true, () => {}], t }), null);
+  assert.equal(deleteArchived.Component({ sessionId: 's1', displayTitle: 'Session 1', useMenuOpenState: () => [true, () => {}], t }), null);
 });
 
 test('workspace copy path reports through the official success toast', async () => {
@@ -216,8 +273,8 @@ test('workspace copy path reports through the official success toast', async () 
   const listener = listeners[listeners.length - 1].listener;
   fireContextMenu(listener, makeRowTarget('workspace:w1', props));
 
-  const { menu } = menuOf(roots);
-  menu.props.onSelect('copy-path');
+  const rows = workspaceRows(roots);
+  rows.find((row) => row.props.key === 'copy-path').props.onSelect();
   await new Promise((resolve) => setTimeout(resolve, 0));
 
   assert.equal(clipboard.at(-1), 'C:\\Work');
@@ -260,12 +317,16 @@ function fireContextMenu(listener, target) {
   return event;
 }
 
-function menuOf(roots) {
-  const host = [...roots].reverse().find((entry) => entry.host.__element !== undefined);
-  assert.ok(host, 'a menu root should have been mounted');
+/** The custom workspace menu keeps its rows in the MenuSurface children. */
+function workspaceRows(roots) {
+  const host = [...roots].reverse().find((entry) => {
+    const element = entry.host.__element;
+    return element !== undefined && element.type?.name === 'WorkspaceRowMenu';
+  });
+  assert.ok(host, 'a workspace menu root should have been mounted');
   const element = host.host.__element;
-  const menu = element.type(element.props);
-  return { host, menu };
+  const tree = element.type(element.props);
+  return tree.props.children.props.children;
 }
 
 test('workspace row opens the expected menu without touching unrelated rows', () => {
@@ -292,16 +353,21 @@ test('workspace row opens the expected menu without touching unrelated rows', ()
   const event = fireContextMenu(listener, target);
   assert.equal(event.defaultPrevented, true);
 
-  const { menu } = menuOf(roots);
+  const rows = workspaceRows(roots);
   assert.equal(
-    menu.props.items.map((item) => item.id).join(','),
-    ['new-session', 'rename', 'sep1', 'vscode', 'explorer', 'copy-path', 'sep2', 'delete'].join(','),
+    rows.map((row) => row.props.key).join(','),
+    ['new-session', 'rename', 'open-with', 'copy-path', 'delete'].join(','),
   );
+  // 工作区菜单和会话菜单共用同一套「打开方式」二级菜单。
+  assert.equal(rows.find((row) => row.props.key === 'open-with').type.name, 'OpenWithSubmenu');
+  assert.equal(rows.find((row) => row.props.key === 'delete').props.separatorBefore, true);
 
-  menu.props.onSelect('rename');
+  rows.find((row) => row.props.key === 'rename').props.onSelect();
   assert.equal(renamed.join(','), 'w1');
-  menu.props.onSelect('new-session');
-  assert.equal(events.join(','), 'new-session');
+  // Selecting closes this menu first, so re-open it for the second action.
+  fireContextMenu(listener, target);
+  workspaceRows(roots).find((row) => row.props.key === 'new-session').props.onSelect();
+  assert.equal([...events, ...renamed].join(','), 'new-session,w1');
 });
 
 test('session row right-click opens the built-in slot-composed menu', () => {

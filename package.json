@@ -1,8 +1,8 @@
 {
   "name": "dsh-sidebar-row-menu",
-  "version": "1.3.5",
+  "version": "1.4.0",
   "type": "module",
-  "description": "DSH sidebar right-click menus: a self-composed menu for workspace rows, and the native slot menu opened at the pointer for session rows.",
+  "description": "DSH sidebar right-click menus: a self-composed menu for workspace rows, and the native slot menu opened at the pointer for session rows, with open-with and archived-session cleanup.",
   "keywords": [
     "deepseek",
     "dsh",
@@ -35,6 +35,7 @@
     "cordis.patch.yml",
     "README.md",
     "README.en.md",
+    "CHANGELOG.md",
     "LICENSE",
     "NOTICE.md",
     "NOTICE.en.md",
@@ -59,7 +60,7 @@
   "scripts": {
     "test": "node --test test/host.test.mjs test/client.test.mjs",
     "test:local": "node --test --test-isolation=none test/host.test.mjs test/client.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js",
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js && node --check lib/host/session-delete.js",
     "build": "npm pack",
     "marketplace:check": "node scripts/marketplace-preflight.mjs",
     "prepack": "npm run check",

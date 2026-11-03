@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -9,6 +9,7 @@ import {
   apply,
   inspectOpenPath,
   isLoopbackRequest,
+  removeSessions,
   toVscodeFileUrl,
 } from '../lib/index.js';
 
@@ -62,12 +63,15 @@ test('isLoopbackRequest accepts loopback hosts and rejects foreign ones', () => 
   );
 });
 
-function createRoute() {
+function createRoute(services) {
   let route;
   apply({
     effect(fn) {
       fn();
       return () => {};
+    },
+    get(name) {
+      return services?.[name];
     },
     webServer: {
       register(value) {
@@ -80,6 +84,78 @@ function createRoute() {
   assert.equal(route.kind, 'prefix');
   assert.equal(route.path, '/dsh-sidebar-row-menu');
   return route;
+}
+
+/** Build a host ctx whose session services are scripted by the test. */
+function createDeleteContext({ headers = [], live, calls = [] }) {
+  let route;
+  const ctx = {
+    effect(fn) {
+      fn();
+      return () => {};
+    },
+    webServer: {
+      register(value) {
+        route = value;
+        return () => {};
+      },
+    },
+    logger: { warn() {} },
+    emit(...args) {
+      calls.push(['emit', ...args]);
+    },
+    get(name) {
+      if (name === 'sessions') {
+        return {
+          get(id) {
+            return live?.header?.id === id ? live : undefined;
+          },
+          liveEntryFor(value) {
+            calls.push(['liveEntryFor']);
+            return { live: value };
+          },
+          detachEntered(entry) {
+            calls.push(['detachEntered', entry]);
+          },
+        };
+      }
+      if (name === 'sessionQuery') {
+        return {
+          async listSessions() {
+            return headers.map((header) => ({ header }));
+          },
+        };
+      }
+      if (name === 'sessionPersistence') {
+        return {
+          root: '',
+          locate({ id }) {
+            return { path: join(dir, id, 'transcript.jsonl') };
+          },
+        };
+      }
+      if (name === 'workspaceRegistry') {
+        return {
+          async unarchiveSession(id) {
+            calls.push(['unarchiveSession', id]);
+          },
+          async unpinSession(id) {
+            calls.push(['unpinSession', id]);
+          },
+        };
+      }
+      return undefined;
+    },
+  };
+  apply(ctx);
+  return { route, calls };
+}
+
+function seedSession(id) {
+  const sessionDir = join(dir, id);
+  mkdirSync(sessionDir, { recursive: true });
+  writeFileSync(join(sessionDir, 'transcript.jsonl'), '{}');
+  return sessionDir;
 }
 
 async function call(route, { method = 'POST', url = '/dsh-sidebar-row-menu/open', body, raw, remote = '127.0.0.1', headers = {} } = {}) {
@@ -124,4 +200,125 @@ test('route validates the path before spawning anything', async () => {
   const file = await call(route, { body: { target: 'explorer', path: existingFile } });
   assert.equal(file.status, 404);
   assert.equal(file.body.error, 'path-not-directory');
+});
+
+const DELETE_URL = '/dsh-sidebar-row-menu/session/delete';
+
+test('delete route rejects bad requests and unreachable hosts', async () => {
+  // No host services at all: the route still exists but reports 503.
+  const bare = createRoute();
+  assert.equal((await call(bare, { url: DELETE_URL, body: { sessionIds: ['s1'] } })).status, 503);
+
+  const { route } = createDeleteContext({ headers: [] });
+  assert.equal(
+    (await call(route, { url: DELETE_URL, body: { sessionIds: ['s1'] }, remote: '10.0.0.5' })).status,
+    403,
+  );
+  assert.equal((await call(route, { url: DELETE_URL, method: 'GET' })).status, 405);
+  assert.equal((await call(route, { url: '/dsh-sidebar-row-menu/nope' })).status, 404);
+  assert.equal((await call(route, { url: DELETE_URL, body: {} })).status, 400);
+  assert.equal((await call(route, { url: DELETE_URL, body: { sessionIds: [] } })).status, 400);
+  assert.equal((await call(route, { url: DELETE_URL, body: { sessionIds: ['ok', 1] } })).status, 400);
+  assert.equal(
+    (await call(route, { url: DELETE_URL, body: { sessionIds: Array.from({ length: 501 }, (_, i) => `s${i}`) } })).status,
+    400,
+  );
+});
+
+test('delete route removes a cold session transcript and clears ledger entries', async () => {
+  const sessionDir = seedSession('cold-session');
+  const calls = [];
+  const { route } = createDeleteContext({
+    headers: [{ id: 'cold-session', cwd: dir }],
+    calls,
+  });
+  const result = await call(route, { url: DELETE_URL, body: { sessionIds: ['cold-session'] } });
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, { ok: true, deleted: 1, failed: 0, error: '' });
+  assert.equal(existsSync(sessionDir), false);
+  assert.deepEqual(calls, [
+    ['unarchiveSession', 'cold-session'],
+    ['unpinSession', 'cold-session'],
+    ['emit', 'api-session/removed', 'cold-session'],
+  ]);
+});
+
+test('delete route detaches a live session before removing its transcript', async () => {
+  const sessionDir = seedSession('live-session');
+  const calls = [];
+  const live = { header: { id: 'live-session', cwd: dir } };
+  const { route } = createDeleteContext({ live, calls });
+  const result = await call(route, { url: DELETE_URL, body: { sessionIds: ['live-session'] } });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.equal(existsSync(sessionDir), false);
+  assert.deepEqual(calls.map((entry) => entry[0]), [
+    'liveEntryFor',
+    'detachEntered',
+    'unarchiveSession',
+    'unpinSession',
+    'emit',
+  ]);
+});
+
+test('delete route refuses an unverified directory and keeps it on disk', async () => {
+  const sessionDir = seedSession('needs-verify');
+  const calls = [];
+  const ctx = {
+    effect(fn) {
+      fn();
+      return () => {};
+    },
+    webServer: { register(value) { ctx.route = value; return () => {}; } },
+    logger: { warn() {} },
+    emit() {},
+    get(name) {
+      if (name === 'sessions') return { get: () => undefined };
+      if (name === 'sessionQuery') {
+        return { listSessions: async () => [{ header: { id: 'needs-verify', cwd: dir } }] };
+      }
+      if (name === 'sessionPersistence') {
+        return { root: '', locate: () => ({ path: join(dir, 'wrong-name', 'x.jsonl') }) };
+      }
+      if (name === 'workspaceRegistry') return {};
+      return undefined;
+    },
+  };
+  apply(ctx);
+  const result = await call(ctx.route, { url: DELETE_URL, body: { sessionIds: ['needs-verify'] } });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, false);
+  assert.equal(result.body.deleted, 0);
+  assert.equal(result.body.failed, 1);
+  assert.equal(result.body.code, 'batch-failed');
+  assert.equal(existsSync(sessionDir), true);
+  assert.deepEqual(calls, []);
+});
+
+test('removeSessions filters, dedupes and reports already-missing sessions as success', async () => {
+  const sessionDir = seedSession('keep-me');
+  const calls = [];
+  const { route } = createDeleteContext({ headers: [{ id: 'keep-me', cwd: dir }], calls });
+  assert.ok(route);
+
+  const result = await removeSessions({
+    get(name) {
+      if (name === 'sessions') return { get: () => undefined };
+      if (name === 'sessionQuery') {
+        return { listSessions: async () => [{ header: { id: 'keep-me', cwd: dir } }] };
+      }
+      if (name === 'sessionPersistence') {
+        return { root: '', locate: ({ id }) => ({ path: join(dir, id, 't.jsonl') }) };
+      }
+      if (name === 'workspaceRegistry') return {};
+      return undefined;
+    },
+    emit() {},
+  }, [' keep-me ', 'keep-me', '', 'ghost', null]);
+
+  assert.deepEqual(result, { ok: true, deleted: 1, failed: 0, error: '' });
+  assert.equal(existsSync(sessionDir), false);
 });

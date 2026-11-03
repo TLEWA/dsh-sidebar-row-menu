@@ -1,5 +1,6 @@
 # 开发用临时目录（asar 提取物、离线探针等）
 tmp/
+.tools/
 node_modules/
 *.log
 

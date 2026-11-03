@@ -14,15 +14,16 @@ Right-click menus for the sidebar of [DeepSeek Harness](https://github.com/deeps
 - **Session rows nested under a workspace** — right-click opens that row's native
   "…" menu at the pointer, with the plugin's own entries appended.
 
-Menus are rendered with DSH's official `Menu` component, so visuals, positioning,
-keyboard navigation and click-outside dismissal match the built-in "…" menus.
-The workspace menu is composed by this plugin. Session menu content comes from the
+The workspace menu is drawn with DSH's official `MenuSurface` + `MenuItemButton`
+(the official `Menu` cannot nest submenus), so rows, icons, danger color and group
+separators reuse the built-in look, and keyboard navigation plus click-outside
+dismissal match the native menus. Session menu content comes from the
 `sidebar.workspaces.session.menu.item` slot — built-in actions and other plugins'
 actions are all there. This plugin only appends its own entries; it does not copy
 or hardcode any built-in action.
 
-> The "…" button menu stays exactly as DSH ships it. The plugin's three entries
-> appear only when the menu is opened by right-click. A right-click menu does not
+> The "…" button menu stays exactly as DSH ships it. The plugin's entries appear
+> only when the menu is opened by right-click. A right-click menu does not
 > close when the pointer leaves it (same as the workspace menu); it closes only on
 > an outside click, an item selection, or Escape.
 
@@ -34,8 +35,8 @@ or hardcode any built-in action.
 | --- | --- |
 | New session | Expands the workspace and starts a session (same as the row's `+`) |
 | Rename | Opens the official "Rename workspace" dialog |
-| Open in VS Code | Host opens the workspace directory in a new window |
-| Open in Explorer | Host opens the system file manager |
+| Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code") and opens the workspace directory |
+| Open with | A submenu of external apps (editors, terminals, file managers) sharing the session menu's catalog, pinning and toggles; hover expands it |
 | Copy workspace path | Copies the directory path |
 | Open in new tab | Only when `dsh-project-tabs` (exposing `openWorkspaceInTab`) is installed |
 | Delete workspace | Opens the official delete confirmation |
@@ -48,21 +49,55 @@ Right-click does not build a second menu; it opens the row's own "…" menu:
 | --- | --- |
 | DSH built-ins | Rename, Fork session, Pin / Unpin, Archive / Unarchive, Copy Session ID |
 | Other plugins | Whatever they register into `sidebar.workspaces.session.menu.item` |
-| This plugin | Open in VS Code, Open in Explorer |
+| This plugin | Pinned open-with apps (top level), Open with (submenu), Delete session / Delete all archived sessions (archived rows only) |
 
-The two entries added by this plugin:
+The entries added by this plugin:
 
 | Item | Behavior |
 | --- | --- |
-| Open in VS Code | Uses the session's `cwd`, falling back to its workspace directory |
-| Open in Explorer | Same as above |
+| Open with | A submenu of external apps provided by the host (editors, terminals, file managers) opening the session's `cwd`; falls back to its workspace directory. Hovering the row expands the submenu |
+| Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code"). Until configured, the first detected editor is pinned automatically, otherwise the first catalog app |
+| Delete session | Only on archived sessions; permanently deletes that one session and its transcript after confirmation |
+| Delete all archived sessions | Only on archived sessions; permanently deletes every archived session and its transcript after confirmation |
 
-These two are **right-click only**: they do not mount when the "…" button opens
+The "Open with" catalog comes from DSH's built-in `open-in-app` routes, so it is the
+same source DSH itself uses; labels and icons are rendered by this plugin, each app
+can be hidden in Settings, and frequently used apps can be pinned to the top level.
+Both delete entries are served by this plugin's own host route. They never
+touch unarchived sessions and do not cascade into forked child sessions.
+
+These entries are **right-click only**: they do not mount when the "…" button opens
 the menu. A short-lived window flag is set before opening; outside that window the
 entries render `null`.
 
 Blank draft sessions have no native "…" menu and are left alone. Rows that are
 neither a workspace nor a session (e.g. "Show more") are not intercepted.
+
+### Settings
+
+Settings → "Row menu" toggles every new entry:
+
+| Switch | Effect |
+| --- | --- |
+| Open with | Hides "Open with" and every pinned app from workspace and session menus |
+| Open with → applications | Hides individual applications; the adjacent "Pin" button promotes an app to the top level |
+| Delete session | Hides the single-session delete entry on archived rows |
+| Delete all archived sessions | Hides the bulk-delete entry |
+
+Switches live in browser `localStorage` (`dsh.sidebar-row-menu.items.v1`,
+`dsh.sidebar-row-menu.open-with.v1` and `dsh.sidebar-row-menu.open-with.pinned.v1`)
+and apply immediately. Before the first explicit pin, the plugin derives one: the
+first detected editor (usually VS Code), or the first catalog app when no editor
+exists.
+
+### Coexistence with dsh-session-menu
+
+When [`dsh-session-menu`](https://github.com/big-head-pigeon/dsh-session-menu) is
+installed, this plugin looks for its `session-menu-open-with` /
+`session-menu-delete` / `session-menu-delete-archived` entries in the session menu slot. If present, the
+matching entries here are hidden and the settings switches are disabled with a
+"provided by dsh-session-menu" hint. No configuration of the other plugin is read
+or changed.
 
 ## Install
 
@@ -89,13 +124,13 @@ resolve it directly by name:
 Pin a version by appending it to the name:
 
 ```
-dsh-sidebar-row-menu@1.3.5
+dsh-sidebar-row-menu@1.4.0
 ```
 
 Equivalent command line:
 
 ```powershell
-dsh plugin --profile desktop add dsh-sidebar-row-menu@1.3.5
+dsh plugin --profile desktop add dsh-sidebar-row-menu@1.4.0
 ```
 
 ### Install from GitHub
@@ -115,13 +150,13 @@ repository is already runnable, so **no local build is required**.
 That URL tracks the latest commit on `main`. Pin a tag for a stable version:
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu#v1.3.5
+https://github.com/TLEWA/dsh-sidebar-row-menu#v1.4.0
 ```
 
 Or install the tarball built by Actions directly, without Git:
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.3.5/dsh-sidebar-row-menu-1.3.5.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.4.0/dsh-sidebar-row-menu-1.4.0.tgz
 ```
 
 Equivalent command line:
@@ -253,7 +288,8 @@ lib/index.js          host entry: name / inject / apply plus re-exported helpers
 lib/host/security.js  loopback request fence
 lib/host/paths.js     path validation, vscode://file encoding
 lib/host/launch.js    VS Code / Explorer launching
-lib/host/route.js     /open route and HTTP status codes
+lib/host/route.js     /open and /session/delete routes, HTTP status codes
+lib/host/session-delete.js transcript verification and deletion (detach / rm / re-check)
 lib/client.js         browser half: fiber lookup, slot registration, menu mount
 cordis.patch.yml      bundle patch inserting the plugin into the profile tree
 scripts/install.ps1   pnpm-free install / uninstall
@@ -287,7 +323,7 @@ party cannot re-layout someone else's slot.
 
 Therefore a session right-click does exactly one thing: find the `Menu` in the
 row's fiber subtree and trigger its anchor (the ellipsis button). The same slot
-content opens. The plugin's own three actions are registered through
+content opens. The plugin's own actions are registered through
 `ctx.slots.inject` + `ctx.slots.register`, so:
 
 - they do not depend on built-in fork/pin entries existing;
@@ -295,6 +331,9 @@ content opens. The plugin's own three actions are registered through
 - no built-in action is copied or hardcoded.
 
 Workspace rows have no such slot, so their menu is still composed by this plugin.
+The official `Menu` accepts only a flat `items` list and cannot express submenus, so
+the workspace menu is drawn with `MenuSurface` + `MenuItemButton`: rows, icons,
+danger styling and separators reuse the official controls.
 
 ### Why the session menu appears at the pointer
 
@@ -307,15 +346,15 @@ position.
 
 The "…" menu and the right-click menu share one `Menu` instance and one slot
 content; the only difference is the `rightClickMenuUntil` window — the plugin's
-three entries mount only inside it, and the window is cleared when the menu closes.
+entries mount only inside it, and the window is cleared when the menu closes.
 
 ### Why the workspace menu is mounted imperatively
 
 A contextmenu event is not part of React's render flow. The workspace menu creates
-a `0×0`, `z-index:2147483647` host on demand, `createRoot`s the official `Menu`
-(`portal` plus an explicit `getAnchorRect` pinned to the pointer), and unmounts and
-removes the host on close. The session menu mounts nothing new; it only opens the
-row's existing menu.
+a `0×0`, `z-index:2147483647` host on demand and `createRoot`s a self-drawn panel;
+after mount it measures once and clamps its corner into the viewport, then unmounts
+and removes the host on close. The session menu mounts nothing new; it only opens
+the row's existing menu.
 
 ### Host route
 
@@ -332,6 +371,23 @@ row's existing menu.
 - spawn uses `detached + stdio:'ignore'` and deliberately does **not** set
   `windowsHide` (otherwise Explorer windows would be hidden).
 
+`POST /dsh-sidebar-row-menu/session/delete`, body `{ sessionIds: string[] }`.
+
+- same loopback / POST / exact path / 64 KB body checks; `sessionIds` must be a
+  non-empty array of non-empty strings, at most 500;
+- sequential deletion: cancel a running session, detach a live one, then locate the
+  transcript directory through `sessionPersistence.locate()`; the directory's
+  basename must equal the session id or deletion is refused (no parent-directory
+  misfires);
+- after deleting, the directory is re-checked three times to ensure it did not come
+  back, then the `workspaceRegistry` archive/pin records are cleared and
+  `api-session/removed` is emitted;
+- partial failures return `200` + `{ ok:false, deleted, failed, error }`; the dialog
+  stays open and reports the counts.
+
+"Open with" does not touch this plugin's host: it calls DSH's built-in
+`open-in-app/apps`, `open-in-app/open` and `open-in-app/icon/<id>` directly.
+
 ## Compatibility
 
 Built against DSH client `0.2.1-rc.5` (`ProjectRowItem`, `SessionNodeItem`,
@@ -347,16 +403,19 @@ Built against DSH client `0.2.1-rc.5` (`ProjectRowItem`, `SessionNodeItem`,
 - Session right-click depends on the row's `Menu` staying in the fiber subtree. If
   it is not found, the plugin clicks the row-actions ellipsis button; failing that
   it gives up — it never builds a competing menu and never triggers row open.
-- Session "delete" is not offered: DSH officially supports archive (recoverable).
-  Deleting records by force tends to leave orphan data. Archive/unarchive is
-  handled by the built-in menu entry.
-- The VS Code / Explorer directory for a session comes from `sessions.list`'s
-  `cwd`, falling back to the workspace directory. Ungrouped sessions may have no
+- Permanent deletion is offered for **archived** sessions only; unarchived sessions
+  still use the built-in archive/unarchive. Deletion does not cascade into forked
+  child sessions — delete those separately when needed.
+- Deletion works directly on the transcript directory; the host has no trash bin.
+  The confirmation dialog states that it cannot be undone.
+- The open-with directory for a session comes from `sessions.list`'s `cwd`,
+  falling back to the workspace directory. Ungrouped sessions may have no
   directory; in that case a "no directory available" toast is shown.
 
 ## License and notices
 
 - Code: [MIT](LICENSE).
+- Changelog: [CHANGELOG.md](CHANGELOG.md).
 - Third-party code and full license texts: [NOTICE.md](NOTICE.md) · [English](NOTICE.en.md).
 - AI usage and code provenance: [AI_USAGE.md](AI_USAGE.md) · [English](AI_USAGE.en.md).
 

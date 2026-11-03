@@ -15,7 +15,8 @@
   - 宿主：loopback 围栏、JSON 请求体读取、detached spawn、VS Code 启动器探测、
     `vscode://file` 编码（现拆分在 `lib/host/security.js`、`lib/host/launch.js`、
     `lib/host/paths.js`、`lib/host/route.js`）；
-  - 客户端：fiber 解析、官方 `Menu` 挂载、toast、`contextmenu` 捕获安装方式。
+  - 客户端：fiber 解析、官方 `Menu` 挂载、`MenuSurface`/`MenuItemButton` 自绘行、
+    toast、`contextmenu` 捕获安装方式。
 
 ## dsh-workspace-menu
 

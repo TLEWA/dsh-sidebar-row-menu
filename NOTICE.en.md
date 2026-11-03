@@ -17,8 +17,8 @@ adapted portions; all remaining code is copyright its contributors.
     detection, `vscode://file` encoding (now split across
     `lib/host/security.js`, `lib/host/launch.js`, `lib/host/paths.js`,
     `lib/host/route.js`);
-  - client: fiber lookup, official `Menu` mounting, toast, capture-phase
-    `contextmenu` installation.
+  - client: fiber lookup, official `Menu` mounting, `MenuSurface`/`MenuItemButton`
+    drawn rows, toast, capture-phase `contextmenu` installation.
 
 ## dsh-workspace-menu
 

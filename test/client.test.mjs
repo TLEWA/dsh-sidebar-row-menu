@@ -7,10 +7,16 @@ import test from 'node:test';
 const clientPath = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 const source = readFileSync(clientPath, 'utf8');
 
-function loadClient() {
+function loadClient(stored = {}) {
   let registration;
   const listeners = [];
   const hosts = [];
+  const storage = new Map(Object.entries(stored));
+  const localStorage = {
+    getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+    setItem: (key, value) => storage.set(key, String(value)),
+    removeItem: (key) => storage.delete(key),
+  };
   const window = {
     __ModuleLoader__: {
       load(value) {
@@ -18,6 +24,7 @@ function loadClient() {
       },
     },
     location: { href: 'http://127.0.0.1:10102/' },
+    localStorage,
     addEventListener(type, listener, capture) {
       listeners.push({ type, listener, capture });
     },
@@ -44,6 +51,7 @@ function loadClient() {
   vm.runInNewContext(source, {
     window,
     document,
+    localStorage,
     console,
     URL,
     PointerEvent: class PointerEvent {
@@ -54,7 +62,7 @@ function loadClient() {
     },
   });
   assert.ok(registration, 'client.js must call window.__ModuleLoader__.load');
-  return { registration, listeners, hosts, window, document };
+  return { registration, listeners, hosts, window, document, storage };
 }
 
 function makeRequire(seen, roots, clipboard) {
@@ -256,6 +264,53 @@ test('session entries disappear when dsh-session-menu already provides them', ()
   const deleteArchived = registrations.find((entry) => entry.spec.id === 'row-menu-delete-archived');
   assert.equal(openWith.Component({ sessionId: 's1', displayTitle: 'Session 1', useMenuOpenState: () => [true, () => {}], t }), null);
   assert.equal(deleteArchived.Component({ sessionId: 's1', displayTitle: 'Session 1', useMenuOpenState: () => [true, () => {}], t }), null);
+});
+
+test('unarchived sessions get the delete entry only after opting in', () => {
+  const ITEMS_KEY = 'dsh.sidebar-row-menu.items.v1';
+
+  function deleteComponent(stored, archivedIds) {
+    const { registration, listeners } = loadClient(stored);
+    const exported = registration.factory(makeRequire([], [], []));
+    const ctx = makeCtx({
+      workspaces: {
+        list: {
+          getSnapshot: () => ({ archivedSessionIds: archivedIds }),
+          subscribe: () => () => {},
+        },
+      },
+    });
+    exported.apply(ctx);
+    fireContextMenu(
+      listeners[listeners.length - 1].listener,
+      makeRowTarget(
+        'session:s1',
+        { node: { id: 's1', title: 'Session 1', blank: false }, onRenameRequest: () => {} },
+        { open: false, anchor: { props: { onClick: () => {} } } },
+      ),
+    );
+    const entry = ctx.slots.registrations.find((candidate) => candidate.spec.id === 'row-menu-delete-session');
+    assert.ok(entry, 'the single-session delete entry must be registered');
+    return entry.Component;
+  }
+
+  const props = {
+    sessionId: 's1',
+    displayTitle: 'Session 1',
+    useMenuOpenState: () => [true, () => {}],
+    t: (key) => key,
+  };
+
+  // Default stays conservative: archived rows keep the entry, unarchived rows do not.
+  assert.equal(deleteComponent({}, [])(props), null);
+  const archived = deleteComponent({}, ['s1'])(props);
+  assert.equal(archived.type.name, 'MenuItemButton');
+
+  // Opting in extends the same entry to unarchived sessions.
+  const optedIn = deleteComponent({ [ITEMS_KEY]: JSON.stringify({ deleteUnarchived: true }) }, [])(props);
+  assert.equal(optedIn.type.name, 'MenuItemButton');
+  assert.equal(optedIn.props.danger, true);
+  assert.equal(optedIn.props.children, 'deleteSession');
 });
 
 test('workspace copy path reports through the official success toast', async () => {

@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.4.1 — 2026-11-03
+
+### Added
+
+- **Allow deleting unarchived sessions** (off by default): a new switch in
+  Settings → "Row menu" extends the existing "Delete session permanently" entry to
+  unarchived session rows. The confirmation dialog, host route and transcript
+  cleanup are unchanged; without the switch the entry stays archived-only.
+
+### 中文摘要
+
+- 设置 →「行菜单」新增「允许删除未归档会话」开关（默认关闭）。开启后，未归档会话的
+  右键菜单也会出现「永久删除会话」，确认后按原有宿主路由删除日志；关闭时维持仅已归档
+  会话可见。
+
 ## 1.4.0 — 2026-11-03
 
 ### Added

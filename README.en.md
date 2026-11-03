@@ -49,7 +49,7 @@ Right-click does not build a second menu; it opens the row's own "…" menu:
 | --- | --- |
 | DSH built-ins | Rename, Fork session, Pin / Unpin, Archive / Unarchive, Copy Session ID |
 | Other plugins | Whatever they register into `sidebar.workspaces.session.menu.item` |
-| This plugin | Pinned open-with apps (top level), Open with (submenu), Delete session / Delete all archived sessions (archived rows only) |
+| This plugin | Pinned open-with apps (top level), Open with (submenu), Delete session / Delete all archived sessions (archived rows by default; unarchived rows can be opted in) |
 
 The entries added by this plugin:
 
@@ -57,14 +57,15 @@ The entries added by this plugin:
 | --- | --- |
 | Open with | A submenu of external apps provided by the host (editors, terminals, file managers) opening the session's `cwd`; falls back to its workspace directory. Hovering the row expands the submenu |
 | Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code"). Until configured, the first detected editor is pinned automatically, otherwise the first catalog app |
-| Delete session | Only on archived sessions; permanently deletes that one session and its transcript after confirmation |
+| Delete session | On archived sessions by default; permanently deletes that one session and its transcript after confirmation. Enable "Allow deleting unarchived sessions" in Settings to show it on unarchived rows too |
 | Delete all archived sessions | Only on archived sessions; permanently deletes every archived session and its transcript after confirmation |
 
 The "Open with" catalog comes from DSH's built-in `open-in-app` routes, so it is the
 same source DSH itself uses; labels and icons are rendered by this plugin, each app
 can be hidden in Settings, and frequently used apps can be pinned to the top level.
-Both delete entries are served by this plugin's own host route. They never
-touch unarchived sessions and do not cascade into forked child sessions.
+Both delete entries are served by this plugin's own host route. They leave
+unarchived sessions alone by default; the opt-in switch extends the single-session
+entry to them. Deletion never cascades into forked child sessions.
 
 These entries are **right-click only**: they do not mount when the "…" button opens
 the menu. A short-lived window flag is set before opening; outside that window the
@@ -81,7 +82,8 @@ Settings → "Row menu" toggles every new entry:
 | --- | --- |
 | Open with | Hides "Open with" and every pinned app from workspace and session menus |
 | Open with → applications | Hides individual applications; the adjacent "Pin" button promotes an app to the top level |
-| Delete session | Hides the single-session delete entry on archived rows |
+| Delete session | Hides the single-session delete entry in session menus |
+| Allow deleting unarchived sessions | Off by default; also shows "Delete session permanently" on unarchived rows. Requires the previous switch |
 | Delete all archived sessions | Hides the bulk-delete entry |
 
 Switches live in browser `localStorage` (`dsh.sidebar-row-menu.items.v1`,
@@ -124,13 +126,13 @@ resolve it directly by name:
 Pin a version by appending it to the name:
 
 ```
-dsh-sidebar-row-menu@1.4.0
+dsh-sidebar-row-menu@1.4.1
 ```
 
 Equivalent command line:
 
 ```powershell
-dsh plugin --profile desktop add dsh-sidebar-row-menu@1.4.0
+dsh plugin --profile desktop add dsh-sidebar-row-menu@1.4.1
 ```
 
 ### Install from GitHub
@@ -150,13 +152,13 @@ repository is already runnable, so **no local build is required**.
 That URL tracks the latest commit on `main`. Pin a tag for a stable version:
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu#v1.4.0
+https://github.com/TLEWA/dsh-sidebar-row-menu#v1.4.1
 ```
 
 Or install the tarball built by Actions directly, without Git:
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.4.0/dsh-sidebar-row-menu-1.4.0.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.4.1/dsh-sidebar-row-menu-1.4.1.tgz
 ```
 
 Equivalent command line:
@@ -403,9 +405,10 @@ Built against DSH client `0.2.1-rc.5` (`ProjectRowItem`, `SessionNodeItem`,
 - Session right-click depends on the row's `Menu` staying in the fiber subtree. If
   it is not found, the plugin clicks the row-actions ellipsis button; failing that
   it gives up — it never builds a competing menu and never triggers row open.
-- Permanent deletion is offered for **archived** sessions only; unarchived sessions
-  still use the built-in archive/unarchive. Deletion does not cascade into forked
-  child sessions — delete those separately when needed.
+- Permanent deletion is offered for **archived** sessions by default; enable
+  "Allow deleting unarchived sessions" to delete unarchived sessions from their
+  right-click menu as well. Deletion does not cascade into forked child sessions —
+  delete those separately when needed.
 - Deletion works directly on the transcript directory; the host has no trash bin.
   The confirmation dialog states that it cannot be undone.
 - The open-with directory for a session comes from `sessions.list`'s `cwd`,

@@ -1,6 +1,6 @@
 {
   "name": "dsh-sidebar-row-menu",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "type": "module",
   "description": "DSH sidebar right-click menus: a self-composed menu for workspace rows, and the native slot menu opened at the pointer for session rows, with open-with and archived-session cleanup.",
   "keywords": [

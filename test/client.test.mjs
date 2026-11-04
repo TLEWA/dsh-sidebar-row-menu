@@ -690,3 +690,76 @@ test('session right-click primes row-action pointer listeners before opening the
   assert.equal(events.join(','), 'pointerdown:mouse:true,toggle');
   assert.equal(roots.length, 0);
 });
+
+/** The session entry that is only visible for right-click opened menus. */
+function openWithEntry(ctx) {
+  const entry = ctx.slots.registrations.find((candidate) => candidate.spec.id === 'row-menu-open-with');
+  assert.ok(entry, 'row-menu-open-with must be registered');
+  return entry;
+}
+
+const SESSION_ITEM_PROPS = {
+  sessionId: 's1',
+  displayTitle: 'Session 1',
+  useMenuOpenState: () => [true, () => {}],
+  t: (key) => key,
+};
+
+test('0.2.2 rows let the host open the menu at the pointer', () => {
+  const { registration, listeners } = loadClient();
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const events = [];
+  const trigger = {
+    dispatchEvent(event) {
+      events.push(event.type);
+      return true;
+    },
+  };
+  const props = {
+    node: { id: 's1', title: 'Session 1', blank: false, updatedAt: 1 },
+    onRenameRequest: () => {},
+    // 0.2.2: the row div carries the host trigger props (useContextMenu().getTriggerProps).
+    onContextMenu: () => events.push('host-open'),
+  };
+  const target = makeRowTarget('session:s1', props, null, trigger);
+  const ctx = makeCtx();
+  exported.apply(ctx);
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  const entry = openWithEntry(ctx);
+
+  // 没有右键手势时条目保持隐藏（例如行尾「…」打开的菜单）。
+  assert.equal(entry.Component(SESSION_ITEM_PROPS), null);
+
+  const event = fireContextMenu(listener, target);
+  // 宿主自己会把菜单开在指针处：不 preventDefault（宿主看到 defaultPrevented 会放弃），
+  // 也不代点「…」——只补一次 pointerdown 让同步注入的插件条目同帧出现。
+  assert.equal(event.defaultPrevented, false);
+  assert.equal(events.join(','), 'pointerdown');
+  assert.equal(roots.length, 0);
+  assert.notEqual(entry.Component(SESSION_ITEM_PROPS), null);
+});
+
+test('the row action button hides the right-click entries for its own menu', () => {
+  const { registration, listeners, documentListeners } = loadClient();
+  const exported = registration.factory(makeRequire([], [], []));
+  const props = {
+    node: { id: 's1', title: 'Session 1', blank: false, updatedAt: 1 },
+    onRenameRequest: () => {},
+    onContextMenu: () => {},
+  };
+  const ctx = makeCtx();
+  exported.apply(ctx);
+  const menu = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  const pointerdown = documentListeners.find((entry) => entry.type === 'pointerdown').listener;
+  const entry = openWithEntry(ctx);
+
+  fireContextMenu(menu, makeRowTarget('session:s1', props, null, null));
+  assert.notEqual(entry.Component(SESSION_ITEM_PROPS), null);
+
+  pointerdown({
+    isTrusted: true,
+    target: { nodeType: 1, closest: (selector) => (String(selector).includes('rowActions') ? {} : null) },
+  });
+  assert.equal(entry.Component(SESSION_ITEM_PROPS), null);
+});

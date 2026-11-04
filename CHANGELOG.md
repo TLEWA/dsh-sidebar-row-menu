@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.5.1 — 2026-11-05
+
+### Fixed
+
+- **Session-row right-click entries appear every time on DSH 0.2.2.** The entries
+  (pinned app, Open with, permanent delete, delete archived) used to be gated by a
+  400 ms time window measured from the `contextmenu` event. 0.2.2 mounts the menu
+  asynchronously and, when a menu is already open, tears the previous panel down
+  before mounting the new one — that teardown reset the window, so the next menu
+  could come up without the plugin entries. The gate is now a gesture mark that is
+  cleared only once the menu panel has actually mounted, so right-click keeps its
+  entries while the row's `…` button still opens the untouched native menu.
+  On 0.2.2 the plugin also stops intercepting `contextmenu` and forwarding it as an
+  ellipsis click: the row already carries the host trigger, so the host opens its
+  own menu at the pointer (no anchor rewriting, no synthetic click).
+
+### 中文摘要
+
+- **修复 0.2.2 上会话行右键菜单「有时没有插件条目」**：条目原来用 `contextmenu`
+  之后 400 ms 的时间窗口判断，而 0.2.2 的菜单是异步挂载的，替换已有菜单时还会
+  先卸载旧面板再挂新面板，这次卸载会把窗口清掉，于是下一次菜单可能不带插件条目。
+  改为「右键手势标记」：只有菜单面板真正挂载后才收尾，右键稳定带条目，行尾「…」
+  打开的菜单仍然保持原生内容。
+  0.2.2 上也不再拦截 `contextmenu` 后转成「…」点击：行本身已带宿主触发器，直接
+  由宿主把菜单开在指针处（不改锚点、不补发点击）。
+
 ## 1.5.0 — 2026-11-05
 
 ### Added

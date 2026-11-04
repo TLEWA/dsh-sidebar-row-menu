@@ -44,8 +44,8 @@ its own entries; it does not copy or hardcode any built-in action.
 On 0.2.2 the host renders this menu, and the plugin's items interleave with the
 built-in Rename (100), Reveal in file manager (200) and Delete workspace (300),
 using the same grouping rules as the session menu: New session 90, Open in new
-tab 110, Copy workspace path 150, pinned app 210, Open with 220, Delete workspace
-and all sessions 310. These items are right-click only by default; the row's "…"
+tab 110, archived-session toggle 130, Copy workspace path 150, pinned app 210,
+Open with 220, Delete workspace and all sessions 310. These items are right-click only by default; the row's "…"
 menu keeps its native content unless you opt entries in under Settings → "Also
 show in the "…" menu → workspace". On 0.2.1 the plugin draws the whole menu and
 runs the official dialogs for Rename and Delete workspace.
@@ -55,6 +55,7 @@ runs the official dialogs for Rename and Delete workspace.
 | New session | Expands the workspace and starts a session (same as the row's `+`) |
 | Rename (built-in) | Opens the official "Rename workspace" dialog; on 0.2.1 the plugin renders this item itself |
 | Open in new tab | Only when `dsh-project-tabs` (exposing `openWorkspaceInTab`) is installed |
+| Show / hide archived sessions | Only on workspaces that have archived sessions; the label follows the current state. "Show archived sessions" switches the sidebar's global archived filter to all conversations and then hides every other workspace's archived rows (including "Ungrouped"), so only this workspace's archived sessions appear; "Hide archived sessions" puts them back. Per-workspace choices persist across reloads; changing the global filter under "View options" wins over them |
 | Copy workspace path | Copies the directory path |
 | Reveal in file manager (built-in) | Opens the workspace directory in Explorer; provided by the host on 0.2.2, absent on 0.2.1 |
 | Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code") and opens the workspace directory |
@@ -124,7 +125,8 @@ Settings → "Row menu" toggles every new entry:
 | Delete session | Hides the single-session delete entry in session menus |
 | Allow deleting unarchived sessions | Off by default; also shows "Delete session permanently" on unarchived rows. Requires the previous switch |
 | Delete all archived sessions | Hides the bulk-delete entry |
-| Also show in the "…" menu → workspace | Adds workspace right-click entries one by one to the row's "…" menu: New session, Open with, Copy workspace path, Open in new tab, Delete workspace and all sessions. On 0.2.1 enabling any of them makes this plugin render the "…" menu |
+| Show archived sessions | Hides the workspace "Show / hide archived sessions" entry (on by default; the entry itself only appears when that workspace has archived sessions) |
+| Also show in the "…" menu → workspace | Adds workspace right-click entries one by one to the row's "…" menu: New session, Open with, Copy workspace path, Open in new tab, archived-session toggle, Delete workspace and all sessions. On 0.2.1 enabling any of them makes this plugin render the "…" menu |
 | Also show in the "…" menu → session | Adds session right-click entries one by one to the native "…" menu: Open with, Delete session, Delete all archived sessions |
 
 The "Also show in the "…" menu" switches are all off by default; until one is
@@ -369,6 +371,17 @@ is also used to tell whether the row already carries the host's own context menu
 trigger (`memoizedProps.onContextMenu` is a function): if it does, the host opens the
 menu at the pointer by itself and the plugin only drops a gesture mark, never
 touching the event.
+
+### Why archived sessions cannot use the global filter alone
+
+DSH exposes one global archived-visibility filter (`archivedFilter`: hide archived /
+all conversations / archived only) and no per-workspace equivalent. The plugin builds
+the per-workspace layer on top of it: it drives the host view action to "all
+conversations", then hides other workspaces' (and "Ungrouped") archived rows with an inline
+`display:none`. The snapshot's `archivedSessionIds` tells it which rows are archived,
+and a MutationObserver re-applies the hiding whenever React replaces the row nodes.
+The plugin does not keep the global filter hostage: once the user picks a filter under
+"View options", the per-workspace hidden set is cleared and the host's choice wins.
 
 ### Why session actions are not hardcoded
 

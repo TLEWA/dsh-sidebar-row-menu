@@ -16,6 +16,10 @@ function loadClient(stored = {}) {
     getItem: (key) => (storage.has(key) ? storage.get(key) : null),
     setItem: (key, value) => storage.set(key, String(value)),
     removeItem: (key) => storage.delete(key),
+    get length() {
+      return storage.size;
+    },
+    key: (index) => [...storage.keys()][index] ?? null,
   };
   const window = {
     __ModuleLoader__: {
@@ -39,6 +43,7 @@ function loadClient(stored = {}) {
   const documentListeners = [];
   const document = {
     body: { appendChild(el) { hosts.push(el); } },
+    querySelectorAll: () => [],
     addEventListener(type, listener, capture) {
       documentListeners.push({ type, listener, capture });
     },
@@ -254,6 +259,7 @@ test('workspace context menu registers ordered providers for 0.2.2', () => {
     [
       'sidebar-row-menu.workspace.new:workspace:90',
       'sidebar-row-menu.workspace.tab:workspace:110',
+      'sidebar-row-menu.workspace.archived:workspace:130',
       'sidebar-row-menu.workspace.copy:workspace:150',
       'sidebar-row-menu.workspace.pinned:workspace:210',
       'sidebar-row-menu.workspace.open-with:workspace:220',
@@ -265,6 +271,8 @@ test('workspace context menu registers ordered providers for 0.2.2', () => {
     .filter((entry) => entry.spec.name === 'contextMenu.icon')
     .map((entry) => entry.spec.key);
   assert.ok(iconKeys.includes('sidebar-row-menu.open-with'), 'the open-with entry needs an icon slot');
+  assert.ok(iconKeys.includes('sidebar-row-menu.archive'), 'the show-archived entry needs an icon slot');
+  assert.ok(iconKeys.includes('sidebar-row-menu.archive-off'), 'the hide-archived entry needs an icon slot');
 
   const target = { workspaceId: 'w1', path: 'C:\\work', displayTitle: 'Demo' };
   const resolve = (key) => providers.find((spec) => spec.id.endsWith(`.${key}`)).resolve(target);
@@ -333,6 +341,228 @@ test('workspace entries can be opted into the native ellipsis menu', () => {
   assert.equal(resolve('tab').length, 0);
 });
 
+
+function fakeRow(key) {
+  return {
+    style: {},
+    attributes: { 'data-row-key': key },
+    getAttribute(name) {
+      return this.attributes[name] ?? null;
+    },
+    setAttribute(name, value) {
+      this.attributes[name] = String(value);
+    },
+    removeAttribute(name) {
+      delete this.attributes[name];
+    },
+  };
+}
+
+test('workspace menu toggles archived sessions per workspace', () => {
+  const VIEW_KEY = 'dsh.workspace.view.v5';
+  const HIDDEN_KEY = 'dsh.sidebar-row-menu.archived-hidden.v1';
+  const { registration, listeners, document, storage } = loadClient({
+    [VIEW_KEY]: JSON.stringify({ archivedFilter: 'show' }),
+  });
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const snapshot = {
+    items: [
+      { workspaceId: 'w1', sessionIds: ['s1', 's2'] },
+      { workspaceId: 'w2', sessionIds: ['s3'] },
+    ],
+    archivedSessionIds: ['s2', 's3'],
+  };
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+    workspaces: { list: { getSnapshot: () => snapshot, subscribe: () => () => {} } },
+  });
+  exported.apply(ctx);
+
+  const resolve = (key, value = { workspaceId: 'w1', path: 'C:\\work' }) => providers
+    .find((spec) => spec.id.endsWith(`.${key}`))
+    .resolve(value);
+
+  // 右键手势之前解不出任何动作（「…」开关没开）。
+  assert.equal(resolve('archived').length, 0);
+  const menu = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(menu, makeRowTarget('workspace:w1', {
+    group: { workspaceId: 'w1', label: 'Work' },
+    actions: {},
+    onContextMenu: () => {},
+  }));
+
+  const visible = resolve('archived');
+  assert.equal(visible.length, 1);
+  assert.equal(visible[0].label, 'hideArchivedSessions');
+  assert.equal(visible[0].icon.key, 'sidebar-row-menu.archive-off');
+
+  const archivedRow = fakeRow('session:s2');
+  const otherRow = fakeRow('session:s3');
+  document.querySelectorAll = () => [archivedRow, otherRow];
+
+  visible[0].run();
+  assert.equal(archivedRow.style.display, 'none');
+  assert.equal(archivedRow.attributes['data-dsrm-archived-hidden'], '1');
+  assert.equal(otherRow.style.display, undefined, 'other workspaces keep their archived rows');
+  assert.equal(storage.get(HIDDEN_KEY), '["w1"]');
+
+  const hidden = resolve('archived');
+  assert.equal(hidden[0].label, 'showArchivedSessions');
+  assert.equal(hidden[0].icon.key, 'sidebar-row-menu.archive');
+
+  hidden[0].run();
+  assert.equal(archivedRow.style.display, '');
+  assert.equal(archivedRow.attributes['data-dsrm-archived-hidden'], undefined);
+  assert.equal(storage.get(HIDDEN_KEY), '[]');
+
+  // 没有归档会话的工作区不出现这个条目。
+  assert.equal(resolve('archived', { workspaceId: 'w3', path: 'C:\\work' }).length, 0);
+});
+
+test('showing one workspace hides every other archived bucket', () => {
+  const VIEW_KEY = 'dsh.workspace.view.v5';
+  const HIDDEN_KEY = 'dsh.sidebar-row-menu.archived-hidden.v1';
+  const { registration, listeners, document, storage } = loadClient();
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const snapshot = {
+    items: [
+      { workspaceId: 'w1', sessionIds: ['s1', 's2'] },
+      { workspaceId: 'w2', sessionIds: ['s3'] },
+    ],
+    // s4 does not belong to any workspace (the "Ungrouped" row).
+    archivedSessionIds: ['s2', 's3', 's4'],
+  };
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+    workspaces: { list: { getSnapshot: () => snapshot, subscribe: () => () => {} } },
+  });
+  exported.apply(ctx);
+
+  const ownerRow = fakeRow('workspace:w1');
+  ownerRow['__reactFiber$test'] = {
+    memoizedProps: {
+      actions: {
+        setArchivedFilter: (value) => storage.set(VIEW_KEY, JSON.stringify({ archivedFilter: value })),
+      },
+    },
+  };
+  document.querySelector = () => ownerRow;
+
+  const menu = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(menu, makeRowTarget('workspace:w1', {
+    group: { workspaceId: 'w1', label: 'Work' },
+    actions: {},
+    onContextMenu: () => {},
+  }));
+
+  const resolve = (key, value = { workspaceId: 'w1', path: 'C:\\work' }) => providers
+    .find((spec) => spec.id.endsWith(`.${key}`))
+    .resolve(value);
+
+  const archivedRow = fakeRow('session:s2');
+  const otherRow = fakeRow('session:s3');
+  const ungroupedRow = fakeRow('session:s4');
+  document.querySelectorAll = () => [archivedRow, otherRow, ungroupedRow];
+
+  // 全局是「隐藏已归档」：菜单项先给出「显示」。
+  const shown = resolve('archived');
+  assert.equal(shown.length, 1);
+  assert.equal(shown[0].label, 'showArchivedSessions');
+  assert.equal(shown[0].icon.key, 'sidebar-row-menu.archive');
+
+  shown[0].run();
+  // 宿主筛选被切到 show，只留下 w1；另一个工作区和未归组的归档都不显示。
+  assert.equal(JSON.parse(storage.get(VIEW_KEY)).archivedFilter, 'show');
+  assert.deepEqual(JSON.parse(storage.get(HIDDEN_KEY)).sort(), ['', 'w2'].sort());
+  assert.equal(archivedRow.style.display, undefined);
+  assert.equal(otherRow.style.display, 'none');
+  assert.equal(ungroupedRow.style.display, 'none');
+  assert.equal(resolve('archived')[0].label, 'hideArchivedSessions');
+
+  // 再点一次：w1 的归档也收回，全局筛选回到 default，所有行恢复。
+  resolve('archived')[0].run();
+  assert.equal(JSON.parse(storage.get(VIEW_KEY)).archivedFilter, 'default');
+  assert.equal(storage.get(HIDDEN_KEY), '[]');
+  assert.equal(archivedRow.style.display, undefined);
+  assert.equal(otherRow.style.display, '');
+  assert.equal(ungroupedRow.style.display, '');
+});
+
+test('archived entry honours its settings switch and the ellipsis opt-in', () => {
+  const VIEW_KEY = 'dsh.workspace.view.v5';
+  const ITEMS_KEY = 'dsh.sidebar-row-menu.items.v1';
+  const ELLIPSIS_KEY = 'dsh.sidebar-row-menu.ellipsis.v1';
+  const snapshot = {
+    items: [{ workspaceId: 'w1', sessionIds: ['s1', 's2'] }],
+    archivedSessionIds: ['s2'],
+  };
+
+  function setup(stored) {
+    const { registration, listeners } = loadClient({ [VIEW_KEY]: JSON.stringify({ archivedFilter: 'show' }), ...stored });
+    const exported = registration.factory(makeRequire([], [], []));
+    const providers = [];
+    const ctx = makeCtx({
+      contextMenus: {
+        register(spec) {
+          providers.push(spec);
+          return () => {};
+        },
+      },
+      workspaces: { list: { getSnapshot: () => snapshot, subscribe: () => () => {} } },
+    });
+    exported.apply(ctx);
+    fireContextMenu(listeners[listeners.length - 1].listener, makeRowTarget('workspace:w1', {
+      group: { workspaceId: 'w1', label: 'Work' },
+      actions: {},
+      onContextMenu: () => {},
+    }));
+    return (key) => providers.find((spec) => spec.id.endsWith(`.${key}`)).resolve({ workspaceId: 'w1' });
+  }
+
+  assert.equal(setup({ [ITEMS_KEY]: JSON.stringify({ archivedSessions: false }) })('archived').length, 0);
+  assert.equal(setup({})('archived').length, 1);
+});
+
+test('workspace entries can be opted into the ellipsis menu including archived', () => {
+  const VIEW_KEY = 'dsh.workspace.view.v5';
+  const ELLIPSIS_KEY = 'dsh.sidebar-row-menu.ellipsis.v1';
+  const { registration } = loadClient({
+    [VIEW_KEY]: JSON.stringify({ archivedFilter: 'show' }),
+    [ELLIPSIS_KEY]: JSON.stringify({ showArchived: true }),
+  });
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+    workspaces: {
+      list: {
+        getSnapshot: () => ({ items: [{ workspaceId: 'w1', sessionIds: ['s2'] }], archivedSessionIds: ['s2'] }),
+        subscribe: () => () => {},
+      },
+    },
+  });
+  exported.apply(ctx);
+  const actions = providers.find((spec) => spec.id.endsWith('.archived')).resolve({ workspaceId: 'w1' });
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].label, 'hideArchivedSessions');
+});
 
 test('session entries disappear when dsh-session-menu already provides them', () => {
   const { registration, listeners } = loadClient();
@@ -559,6 +789,8 @@ test('settings keep the workspace ellipsis switches on hosts with native menus',
   assert.ok(!texts.includes('settings.ellipsisHintNative'));
   assert.ok(texts.includes('settings.ellipsisWorkspace'));
   assert.ok(texts.includes('settings.ellipsis.newSession.label'));
+  assert.ok(texts.includes('settings.ellipsis.showArchived.label'));
+  assert.ok(texts.includes('settings.archivedSessions.label'));
   assert.ok(texts.includes('settings.ellipsisSession'));
   assert.ok(texts.includes('settings.ellipsis.sessionOpenWith.label'));
 });
@@ -568,6 +800,8 @@ test('settings keeps workspace ellipsis switches on hosts without native menus',
   assert.ok(texts.includes('settings.ellipsisHint'));
   assert.ok(texts.includes('settings.ellipsisWorkspace'));
   assert.ok(texts.includes('settings.ellipsis.newSession.label'));
+  assert.ok(texts.includes('settings.ellipsis.showArchived.label'));
+  assert.ok(texts.includes('settings.archivedSessions.label'));
   assert.ok(texts.includes('settings.ellipsisSession'));
 });
 

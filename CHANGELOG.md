@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.7.0 — 2026-11-05
+
+### Added
+
+- **Per-workspace archived-session toggle in the workspace menu.** A workspace
+  whose group holds archived sessions now gets "Show archived sessions" /
+  "Hide archived sessions" in its right-click menu (and in the row's "…" menu
+  when opted in), using the same archive glyphs as the native View options
+  items. DSH only offers one global archived filter; the plugin switches it to
+  "all conversations" and hides every other workspace's (and "Ungrouped")
+  archived rows, so each workspace can reveal its own archived sessions
+  independently. The choice persists across reloads, and changing the native filter clears it so the
+  host's global choice stays authoritative. The entry can be switched off under
+  Settings → row menu and is only shown when the workspace actually has
+  archived sessions.
+
 ## 1.6.0 — 2026-11-05
 
 ### Added

@@ -14,6 +14,15 @@
   between them. On 0.2.1 the plugin still draws its own workspace menu. Session-row
   entries keep using the `sidebar.workspaces.session.menu.item` extension point.
 
+### Fixed
+
+- The permanent-delete confirmation falls back to “Untitled session” instead of
+  showing an empty `会话「」` for sessions whose title has not been generated yet.
+- On 0.2.2 the settings page now hides the workspace-row “Also show in the … menu”
+  switches: the host shares one native menu between right-click and the `…` button,
+  so those per-entry toggles could never take effect there. The session-row switches
+  still work and stay visible.
+
 ### 中文摘要
 
 - **支持 DSH 0.2.2 的原生右键菜单**：宿主提供 `ctx.contextMenus` 时，工作区行条目改为
@@ -21,6 +30,9 @@
   复制工作区路径 250、在新标签打开 260、删除工作区及所有会话 310；原生为重命名 100、
   在文件夹显示 200、删除工作区 300）。右键与行尾「…」共用宿主同一份菜单。0.2.1 上仍
   走自绘工作区菜单；会话行条目继续通过 `sidebar.workspaces.session.menu.item` 扩展点渲染。
+- 修复未命名会话「永久删除」确认框显示空标题的问题，回退为「未命名会话」。
+- 0.2.2 的设置页隐藏工作区行「同时放进「…」菜单」开关（该版本右键与「…」共用同一份
+  菜单，开关无从生效）；会话行的同类开关保留且仍然有效。
 
 ## 1.4.3 — 2026-11-04
 

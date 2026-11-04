@@ -462,6 +462,54 @@ test('session entries can be opted into the native ellipsis menu', () => {
   assert.equal(rendered.type.name, 'OpenWithSubmenu');
 });
 
+function collectText(node, out = []) {
+  if (node === null || node === undefined || node === false) return out;
+  if (typeof node === 'string') {
+    out.push(node);
+    return out;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) collectText(child, out);
+    return out;
+  }
+  if (typeof node === 'object' && node.props) collectText(node.props.children, out);
+  return out;
+}
+
+function settingsTree(services, stored) {
+  const { registration } = loadClient(stored);
+  const exported = registration.factory(makeRequire([], [], []));
+  const ctx = makeCtx(services);
+  exported.apply(ctx);
+  const entry = ctx.slots.registrations.find((candidate) => candidate.spec.name === 'settings.section');
+  assert.ok(entry, 'settings.section must be registered');
+  return collectText(entry.Component({ t: (key) => key }));
+}
+
+test('settings hides workspace ellipsis switches when the host shares one native menu', () => {
+  const menu = {
+    register: () => () => {},
+    open: () => {},
+    resolve: () => null,
+    close: () => {},
+    notify: () => {},
+  };
+  const texts = settingsTree({ contextMenus: menu });
+  assert.ok(texts.includes('settings.ellipsisHintNative'));
+  assert.ok(texts.includes('settings.ellipsisSession'));
+  assert.ok(texts.includes('settings.ellipsis.sessionOpenWith.label'));
+  assert.ok(!texts.includes('settings.ellipsisWorkspace'));
+  assert.ok(!texts.includes('settings.ellipsis.newSession.label'));
+});
+
+test('settings keeps workspace ellipsis switches on hosts without native menus', () => {
+  const texts = settingsTree({});
+  assert.ok(texts.includes('settings.ellipsisHint'));
+  assert.ok(texts.includes('settings.ellipsisWorkspace'));
+  assert.ok(texts.includes('settings.ellipsis.newSession.label'));
+  assert.ok(texts.includes('settings.ellipsisSession'));
+});
+
 test('workspace copy path reports through the official success toast', async () => {
   const roots = [];
   const clipboard = [];

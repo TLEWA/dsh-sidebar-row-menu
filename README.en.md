@@ -417,6 +417,11 @@ the row's existing menu.
 
 ## Compatibility
 
+The package declares its supported DSH range in `package.json` as
+`engines.dsh`: `>=0.2.1-rc.5 <0.3.0-0`. The DSH host uses it to refuse
+incompatible installs, and the plugin market shows it as the supported version;
+0.3 and later need re-verification before the upper bound is raised.
+
 Built against DSH client `0.2.1-rc.5` (`ProjectRowItem`, `SessionNodeItem`,
 `Menu`). If a DSH upgrade changes those row components or the menu positioning:
 

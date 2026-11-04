@@ -1,6 +1,6 @@
 {
   "name": "dsh-sidebar-row-menu",
-  "version": "1.4.2",
+  "version": "1.4.3",
   "type": "module",
   "description": "DSH sidebar right-click menus: a self-composed menu for workspace rows, and the native slot menu opened at the pointer for session rows, with open-with and archived-session cleanup.",
   "keywords": [
@@ -55,11 +55,12 @@
     }
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20",
+    "dsh": ">=0.2.1-rc.5 <0.3.0-0"
   },
   "scripts": {
-    "test": "node --test test/host.test.mjs test/client.test.mjs",
-    "test:local": "node --test --test-isolation=none test/host.test.mjs test/client.test.mjs",
+    "test": "node --test test/host.test.mjs test/manifest.test.mjs test/client.test.mjs",
+    "test:local": "node --test --test-isolation=none test/host.test.mjs test/manifest.test.mjs test/client.test.mjs",
     "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js && node --check lib/host/session-delete.js && node --check lib/host/workspace-delete.js",
     "build": "npm pack",
     "marketplace:check": "node scripts/marketplace-preflight.mjs",

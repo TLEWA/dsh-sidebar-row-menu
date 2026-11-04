@@ -365,6 +365,10 @@ test/*.test.mjs       node:test
 
 ## 兼容性
 
+本包在 `package.json` 的 `engines.dsh` 中声明支持范围：`>=0.2.1-rc.5 <0.3.0-0`。
+DSH 宿主按该范围拒绝安装不兼容的宿主，插件市场也按它显示支持版本；0.3 起需要重新验证后
+再放宽上限。
+
 按 DSH 客户端 `0.2.1-rc.5` 的 `ProjectRowItem` / `SessionNodeItem` / `Menu` 实现。
 DSH 升级若改动行组件或菜单定位实现：
 

@@ -65,6 +65,13 @@ String(pkg.repository?.url ?? '').includes(repoSlug)
   ? pass('repository', pkg.repository.url)
   : fail('repository', 'does not point at the GitHub repo');
 
+// The market index and the DSH host both read the top-level `engines.dsh`; the
+// nested `dsh.engines.dsh` the organizer-style manifests use is ignored by both.
+const enginesDsh = pkg.engines?.dsh;
+typeof enginesDsh === 'string' && enginesDsh.trim()
+  ? pass('engines.dsh', enginesDsh)
+  : fail('engines.dsh', 'missing — the market would show no supported DSH version');
+
 // --- storefront icon --------------------------------------------------------
 
 if (!existsSync(iconPath)) {

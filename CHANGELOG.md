@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.3 — 2026-11-04
+
+### Changed
+
+- **Declared the supported DSH range**: `package.json` now carries
+  `engines.dsh: ">=0.2.1-rc.5 <0.3.0-0"`. DSH refuses to install or activate the
+  plugin on a host outside that range, and the plugin market lists the range on the
+  card instead of treating the plugin as undeclared. No runtime code changed.
+
+### 中文摘要
+
+- 在 `package.json` 中声明 `engines.dsh: ">=0.2.1-rc.5 <0.3.0-0"`：范围外的 DSH 会拒绝
+  安装/激活，插件市场会显示支持版本，不再当作“未声明”。运行代码无改动。
+
 ## 1.4.2 — 2026-11-03
 
 ### Added

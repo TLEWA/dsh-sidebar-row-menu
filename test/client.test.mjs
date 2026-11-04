@@ -235,6 +235,46 @@ test('apply installs the capture listener and registers session menu entries', (
   assert.equal(listeners.length, 0);
 });
 
+test('workspace context menu registers ordered providers for 0.2.2', () => {
+  const { registration } = loadClient();
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+  });
+  exported.apply(ctx);
+
+  assert.deepEqual(
+    providers.map((spec) => `${spec.id}:${spec.target}:${spec.order}`),
+    [
+      'sidebar-row-menu.workspace.new:workspace:90',
+      'sidebar-row-menu.workspace.pinned:workspace:150',
+      'sidebar-row-menu.workspace.open-with:workspace:180',
+      'sidebar-row-menu.workspace.copy:workspace:250',
+      'sidebar-row-menu.workspace.tab:workspace:260',
+      'sidebar-row-menu.workspace.delete:workspace:310',
+    ],
+  );
+
+  const target = { workspaceId: 'w1', path: 'C:\\work', displayTitle: 'Demo' };
+  const resolve = (key) => providers.find((spec) => spec.id.endsWith(`.${key}`)).resolve(target);
+  assert.equal(resolve('new').map((action) => action.id).join(','), 'new-session');
+  assert.equal(resolve('copy').map((action) => action.id).join(','), 'copy-path');
+  const deleting = resolve('delete');
+  assert.equal(deleting.map((action) => action.id).join(','), 'delete-sessions');
+  assert.equal(deleting[0].danger, true);
+  for (const action of [...resolve('new'), ...resolve('copy'), ...deleting]) {
+    assert.equal('group' in action, false, 'the grouping marker must not leak into the menu');
+  }
+  // Unknown targets resolve to nothing rather than throwing.
+  assert.equal(providers[0].resolve({}).length, 0);
+});
+
 test('session entries disappear when dsh-session-menu already provides them', () => {
   const { registration, listeners } = loadClient();
   const exported = registration.factory(makeRequire([], [], []));

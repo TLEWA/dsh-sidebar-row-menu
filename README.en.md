@@ -99,6 +99,10 @@ Settings → "Row menu" toggles every new entry:
 The "Also show in the "…" menu" switches are all off by default; until one is
 enabled the "…" menu is exactly DSH's own.
 
+On DSH 0.2.2 and later, the workspace row's right-click and "…" already open the
+same host menu, so the plugin entries always show up there; the "Also show in the
+"…" menu → workspace" switches only affect 0.2.1 and older hosts.
+
 Switches live in browser `localStorage` (`dsh.sidebar-row-menu.items.v1`,
 `dsh.sidebar-row-menu.open-with.v1`, `dsh.sidebar-row-menu.open-with.pinned.v1` and
 `dsh.sidebar-row-menu.ellipsis.v1`)
@@ -423,15 +427,32 @@ incompatible installs, and the plugin market shows it as the supported version;
 0.3 and later need re-verification before the upper bound is raised.
 
 Built against DSH client `0.2.1-rc.5` (`ProjectRowItem`, `SessionNodeItem`,
-`Menu`). If a DSH upgrade changes those row components or the menu positioning:
+`Menu`). DSH 0.2.2 moved the sidebar context menus to data-driven
+`ctx.contextMenus`, and the plugin picks the path by host capability:
 
-- workspace right-click silently stops appearing (no error, no UI breakage);
+- **0.2.2+**: workspace entries are registered with `ctx.contextMenus.register`
+  (New session 90, pinned app 150, Open with 180, Copy workspace path 250,
+  Open in new tab 260, Delete workspace and all sessions 310), interleaved by
+  order with the native Rename (100), Reveal (200) and Delete workspace (300).
+  Right-click and the "…" button share the host's single menu.
+- **0.2.1**: no `contextMenus` service, so the plugin keeps drawing its own
+  workspace menu.
+- **Session rows**: 0.2.2 still supports the
+  `sidebar.workspaces.session.menu.item` extension point; the plugin entries keep
+  mounting there, and right-click still opens the host menu at the pointer.
+
+If a DSH upgrade changes those row components or the menu positioning:
+
+- workspace right-click falls back to the self-drawn menu (0.2.1 path) or silently
+  stops appearing (no error, no UI breakage);
 - session right-click falls back to opening next to the "…" button, with correct content.
 
 ## Known limitations
 
-- Depends on the props shape of the built-in row components. If DSH changes them,
-  right-click silently does nothing.
+- On 0.2.1 the plugin depends on the props shape of the built-in row components.
+  From 0.2.2 the workspace entries use `contextMenus`; the session entries still
+  rely on the legacy extension point. If DSH changes the corresponding
+  implementation, right-click may silently do nothing.
 - Session right-click depends on the row's `Menu` staying in the fiber subtree. If
   it is not found, the plugin clicks the row-actions ellipsis button; failing that
   it gives up — it never builds a competing menu and never triggers row open.

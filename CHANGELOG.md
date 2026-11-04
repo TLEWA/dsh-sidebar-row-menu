@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **DSH 0.2.2 native context menus**: on hosts that expose `ctx.contextMenus`, the
+  workspace-row entries are registered as data contributions instead of a self-drawn
+  menu. Entries keep their positions relative to the host items —
+  New session 90, pinned app 150, Open with 180, Copy workspace path 250,
+  Open in new tab 260, Delete workspace and all sessions 310 — so they interleave
+  with the native Rename (100), Reveal (200) and Delete workspace (300). Right-click
+  and the row's `…` button open the same menu, because the host now shares one menu
+  between them. On 0.2.1 the plugin still draws its own workspace menu. Session-row
+  entries keep using the `sidebar.workspaces.session.menu.item` extension point.
+
+### 中文摘要
+
+- **支持 DSH 0.2.2 的原生右键菜单**：宿主提供 `ctx.contextMenus` 时，工作区行条目改为
+  数据贡献注册，按 order 与原生项交错排列（新会话 90、置顶应用 150、打开方式 180、
+  复制工作区路径 250、在新标签打开 260、删除工作区及所有会话 310；原生为重命名 100、
+  在文件夹显示 200、删除工作区 300）。右键与行尾「…」共用宿主同一份菜单。0.2.1 上仍
+  走自绘工作区菜单；会话行条目继续通过 `sidebar.workspaces.session.menu.item` 扩展点渲染。
+
 ## 1.4.3 — 2026-11-04
 
 ### Changed

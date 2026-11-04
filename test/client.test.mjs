@@ -236,7 +236,7 @@ test('apply installs the capture listener and registers session menu entries', (
 });
 
 test('workspace context menu registers ordered providers for 0.2.2', () => {
-  const { registration } = loadClient();
+  const { registration, listeners, documentListeners } = loadClient();
   const exported = registration.factory(makeRequire([], [], []));
   const providers = [];
   const ctx = makeCtx({
@@ -261,8 +261,28 @@ test('workspace context menu registers ordered providers for 0.2.2', () => {
     ],
   );
 
+  const iconKeys = ctx.slots.registrations
+    .filter((entry) => entry.spec.name === 'contextMenu.icon')
+    .map((entry) => entry.spec.key);
+  assert.ok(iconKeys.includes('sidebar-row-menu.open-with'), 'the open-with entry needs an icon slot');
+
   const target = { workspaceId: 'w1', path: 'C:\\work', displayTitle: 'Demo' };
   const resolve = (key) => providers.find((spec) => spec.id.endsWith(`.${key}`)).resolve(target);
+
+  // 「…」打开的菜单默认不带插件条目：provider 只在右键手势里返回动作。
+  assert.equal(resolve('new').length, 0);
+  assert.equal(resolve('copy').length, 0);
+
+  const menu = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  const rowProps = {
+    group: { workspaceId: 'w1', displayTitle: 'Demo' },
+    actions: { rename: () => {}, delete: () => {} },
+    onContextMenu: () => {},
+  };
+  const event = fireContextMenu(menu, makeRowTarget('workspace:w1', rowProps));
+  // 0.2.2 的宿主行自己开菜单：插件只打标记，不拦事件也不自绘。
+  assert.equal(event.defaultPrevented, false);
+
   assert.equal(resolve('new').map((action) => action.id).join(','), 'new-session');
   assert.equal(resolve('copy').map((action) => action.id).join(','), 'copy-path');
   const deleting = resolve('delete');
@@ -271,9 +291,45 @@ test('workspace context menu registers ordered providers for 0.2.2', () => {
   for (const action of [...resolve('new'), ...resolve('copy'), ...deleting]) {
     assert.equal('group' in action, false, 'the grouping marker must not leak into the menu');
   }
+
+  // 行尾「…」按下会收掉手势标记，随后打开的菜单只留原生项。
+  const pointerdown = documentListeners.find((entry) => entry.type === 'pointerdown').listener;
+  pointerdown({
+    isTrusted: true,
+    target: { nodeType: 1, closest: (selector) => (String(selector).includes('rowActions') ? {} : null) },
+  });
+  assert.equal(resolve('new').length, 0);
+
   // Unknown targets resolve to nothing rather than throwing.
   assert.equal(providers[0].resolve({}).length, 0);
 });
+
+test('workspace entries can be opted into the native ellipsis menu', () => {
+  const ELLIPSIS_KEY = 'dsh.sidebar-row-menu.ellipsis.v1';
+  const { registration } = loadClient({
+    [ELLIPSIS_KEY]: JSON.stringify({ newSession: true, deleteSessions: true }),
+  });
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+  });
+  exported.apply(ctx);
+
+  const target = { workspaceId: 'w1', path: 'C:\\work', displayTitle: 'Demo' };
+  const resolve = (key) => providers.find((spec) => spec.id.endsWith(`.${key}`)).resolve(target);
+  // 没有右键手势，但开了附加开关：条目照常进入宿主的「…」菜单。
+  assert.equal(resolve('new').map((action) => action.id).join(','), 'new-session');
+  assert.equal(resolve('delete').map((action) => action.id).join(','), 'delete-sessions');
+  assert.equal(resolve('copy').length, 0);
+  assert.equal(resolve('tab').length, 0);
+});
+
 
 test('session entries disappear when dsh-session-menu already provides them', () => {
   const { registration, listeners } = loadClient();
@@ -486,7 +542,7 @@ function settingsTree(services, stored) {
   return collectText(entry.Component({ t: (key) => key }));
 }
 
-test('settings hides workspace ellipsis switches when the host shares one native menu', () => {
+test('settings keep the workspace ellipsis switches on hosts with native menus', () => {
   const menu = {
     register: () => () => {},
     open: () => {},
@@ -495,11 +551,13 @@ test('settings hides workspace ellipsis switches when the host shares one native
     notify: () => {},
   };
   const texts = settingsTree({ contextMenus: menu });
-  assert.ok(texts.includes('settings.ellipsisHintNative'));
+  // 0.2.2 的「…」与右键共用一份菜单，工作区行的附加开关重新生效。
+  assert.ok(texts.includes('settings.ellipsisHint'));
+  assert.ok(!texts.includes('settings.ellipsisHintNative'));
+  assert.ok(texts.includes('settings.ellipsisWorkspace'));
+  assert.ok(texts.includes('settings.ellipsis.newSession.label'));
   assert.ok(texts.includes('settings.ellipsisSession'));
   assert.ok(texts.includes('settings.ellipsis.sessionOpenWith.label'));
-  assert.ok(!texts.includes('settings.ellipsisWorkspace'));
-  assert.ok(!texts.includes('settings.ellipsis.newSession.label'));
 });
 
 test('settings keeps workspace ellipsis switches on hosts without native menus', () => {

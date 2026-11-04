@@ -10,7 +10,7 @@
 Right-click menus for the sidebar of [DeepSeek Harness](https://github.com/deepseek-ai) (DSH):
 
 - **Workspace rows** — right-click opens a menu (since DSH 0.2.2 it is part of the
-  host's native menu, the same one the row's "…" button opens);
+  host's native menu, with the plugin's items interleaved by `order`);
 - **Session rows nested under a workspace** — right-click opens that row's own menu
   at the pointer, with the plugin's own entries appended.
 
@@ -27,8 +27,10 @@ Session menu content comes from the `sidebar.workspaces.session.menu.item` slot 
 built-in actions and other plugins' actions are all there. This plugin only appends
 its own entries; it does not copy or hardcode any built-in action.
 
-> The "…" button menu stays exactly as DSH ships it. The plugin's session entries
-> appear only when the menu is opened by right-click. On 0.2.2 both gestures share
+> The "…" button menu stays exactly as DSH ships it. The plugin's entries appear
+> only when the menu is opened by right-click — on 0.2.2 that holds for workspace
+> and session rows alike, and each entry can be opted into the "…" menu in Settings.
+> On 0.2.2 both gestures share
 > one host menu, so the plugin tells them apart by the gesture itself: a right-click
 > sets a mark that is released once the menu panel has actually mounted, while the
 > pointerdown on the "…" button clears it immediately. A right-click menu does not
@@ -42,8 +44,10 @@ its own entries; it does not copy or hardcode any built-in action.
 On 0.2.2 the host renders this menu, and the plugin's items interleave with the
 built-in Rename (100), Reveal in file manager (200) and Delete workspace (300):
 New session 90, pinned app 150, Open with 180, Copy workspace path 250, Open in new
-tab 260, Delete workspace and all sessions 310. On 0.2.1 the plugin draws the whole
-menu and runs the official dialogs for Rename and Delete workspace.
+tab 260, Delete workspace and all sessions 310. These items are right-click only by
+default; the row's "…" menu keeps its native content unless you opt entries in under
+Settings → "Also show in the "…" menu → workspace". On 0.2.1 the plugin draws the
+whole menu and runs the official dialogs for Rename and Delete workspace.
 
 | Item | Behavior |
 | --- | --- |
@@ -93,12 +97,17 @@ button clears it at once. While the mark is live the entries render normally;
 otherwise they render `null`.
 
 To use them from the row's "…" button, enable them one by one under Settings →
-"Row menu" → "Also show in the "…" menu". Session entries mount into the native
-"…" menu; on 0.2.1, enabling any workspace entry makes this plugin take over the
-row's "…" button and render the official "Rename / Delete workspace" items alongside
-the enabled plugin entries (on 0.2.2 the host has only one menu, so that group of
-switches is hidden). With everything off, the "…" button behaves exactly like DSH's
-own.
+"Row menu" → "Also show in the "…" menu":
+
+- session entries mount into the native "…" menu;
+- workspace entries on 0.2.2: the host menu is data-driven, so an enabled entry skips
+  the gesture check and appears in the "…" menu; with everything off that menu keeps
+  only the native items;
+- workspace entries on 0.2.1: enabling any of them makes this plugin take over the
+  row's "…" button and render the official "Rename / Delete workspace" items
+  alongside the enabled plugin entries.
+
+With everything off, the "…" button behaves exactly like DSH's own.
 
 Blank draft sessions have no right-click menu and are left alone. Rows that are
 neither a workspace nor a session (e.g. "Show more") are not intercepted.
@@ -114,16 +123,16 @@ Settings → "Row menu" toggles every new entry:
 | Delete session | Hides the single-session delete entry in session menus |
 | Allow deleting unarchived sessions | Off by default; also shows "Delete session permanently" on unarchived rows. Requires the previous switch |
 | Delete all archived sessions | Hides the bulk-delete entry |
-| Also show in the "…" menu → workspace (0.2.1 only) | Adds workspace right-click entries one by one to the row's "…" menu: New session, Open with, Copy workspace path, Open in new tab, Delete workspace and all sessions. Enabling any of them makes this plugin render the "…" menu |
+| Also show in the "…" menu → workspace | Adds workspace right-click entries one by one to the row's "…" menu: New session, Open with, Copy workspace path, Open in new tab, Delete workspace and all sessions. On 0.2.1 enabling any of them makes this plugin render the "…" menu |
 | Also show in the "…" menu → session | Adds session right-click entries one by one to the native "…" menu: Open with, Delete session, Delete all archived sessions |
 
 The "Also show in the "…" menu" switches are all off by default; until one is
 enabled the "…" menu is exactly DSH's own.
 
-On DSH 0.2.2 and later, the workspace row's right-click and "…" already open the
-same host menu, so the plugin entries always show up there; the "Also show in the
-"…" menu → workspace" switches only affect 0.2.1 and older hosts, so they are hidden
-on 0.2.2.
+On DSH 0.2.2 and later the "…" button and right-click share one host menu, yet the
+plugin's entries still appear only on right-click; flipping a switch also puts that
+entry into the "…" menu. On 0.2.1 workspace rows have no host menu to contribute to,
+so the plugin takes over the "…" button and draws the menu itself.
 
 Switches live in browser `localStorage` (`dsh.sidebar-row-menu.items.v1`,
 `dsh.sidebar-row-menu.open-with.v1`, `dsh.sidebar-row-menu.open-with.pinned.v1` and
@@ -416,6 +425,12 @@ re-dispatches is not a gesture.
 Entries read the mark once while mounting, so a slow panel does not matter, and the
 mark only lives until "the panel for this gesture appeared", never into the next one.
 
+Workspace rows on 0.2.2 take a different path: the host menu is built from each
+`ctx.contextMenus.register` provider's `resolve`, which has no React entry to read the
+mark, so the provider checks the same mark while resolving. The "…" pointerdown
+clears it before the host resolves, hence the entries show on right-click only; the
+"Also show in the "…" menu → workspace" switches make the provider skip that check.
+
 ### Why the 0.2.1 menu is mounted imperatively
 
 On 0.2.2 the host mounts every menu and the plugin creates no container. On 0.2.1 a
@@ -482,7 +497,9 @@ menus to a data-driven service, and the plugin picks the path by host capability
   (New session 90, pinned app 150, Open with 180, Copy workspace path 250,
   Open in new tab 260, Delete workspace and all sessions 310), interleaved by
   order with the native Rename (100), Reveal (200) and Delete workspace (300).
-  Right-click and the "…" button share the host's single menu.
+  Right-click and the "…" button share the host's single menu; providers answer only
+  during a right-click gesture (or when the matching "Also show in the "…" menu"
+  switch is on).
 - **0.2.1**: no `contextMenus` service, so the plugin keeps drawing its own
   workspace menu.
 - **Session rows**: 0.2.2 still supports the

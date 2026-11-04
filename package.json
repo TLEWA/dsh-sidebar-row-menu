@@ -1,6 +1,6 @@
 {
   "name": "dsh-sidebar-row-menu",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "type": "module",
   "description": "Adds open-with and cleanup entries to the DSH sidebar context menus: interleaved with the built-in workspace menu and extending the session menu at the pointer on DSH 0.2.2+, with a self-drawn workspace menu on 0.2.1.",
   "keywords": [

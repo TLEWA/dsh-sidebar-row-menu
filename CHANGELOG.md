@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.6.0 — 2026-11-05
+
+### Added
+
+- **Workspace entries can opt into the native "…" menu on DSH 0.2.2.** The
+  workspace-row entries (New session, pinned app, Open with, Copy workspace path,
+  Open in new tab, Delete workspace and all sessions) are now right-click only by
+  default, matching the session rows: a provider answers only while a right-click
+  gesture is active. Enabling the matching switch under Settings → "Also show in the
+  "…" menu → workspace" makes it skip that check, so the entry also lands in the
+  host's "…" menu.
+
+### Fixed
+
+- **"Open with" keeps its icon on DSH 0.2.2.** The entry is contributed to the
+  host menu as data, so it had no icon of its own; it now registers an
+  `contextMenu.icon` slot (`sidebar-row-menu.open-with`) and points the action at
+  it, matching the self-drawn 0.2.1 menu.
+- **Menu separators stay visible at 125–150% display scaling.** The host draws
+  0.5px hairlines; at fractional device pixel ratios one of them was painted as a
+  ~0.4px smear and read as missing. A `min-resolution: 1.2dppx` media query now
+  thickens menu separators (and the 0.2.1 `.dsrm-sep`) to 1px in that range, and
+  leaves 1x and 2x displays untouched.
+
+### Changed
+
+- **The workspace-row switches are no longer hidden on 0.2.2.** The section note now
+  explains that 0.2.2 shares one host menu between right-click and the `…` button
+  while the plugin's entries still follow the gesture, and that the switches opt
+  individual entries into that shared menu. This reverses the 1.5.0 decision to hide
+  the group.
+
+### 中文摘要
+
+- **0.2.2 上工作区条目默认只出现在右键菜单**：工作区 provider 解析时检查同一枚
+  右键手势标记，行尾「…」的 `pointerdown` 会先清标，所以「…」菜单保持原生内容。
+- **工作区行可以在设置里「同时放进「…」菜单」**：逐项开启后 provider 跳过手势判断，
+  对应条目也会进入宿主的「…」菜单；0.2.2 上这组开关不再隐藏，说明文字改成描述
+  共用菜单 + 手势区分的真实行为。0.2.1 仍由插件接管「…」按钮自绘。
+- **0.2.2 的「打开方式」恢复图标**：数据贡献的条目本身没有图标，现在注册
+  `contextMenu.icon`（`sidebar-row-menu.open-with`）并由动作引用，与 0.2.1 自绘
+  菜单一致。
+- **125%–150% 缩放下菜单分隔线可见**：宿主用的是 0.5px 细线，在分数像素比下会被
+  摊成约 0.4px 而像「消失」；现在该区间内分隔线（含 0.2.1 的 `.dsrm-sep`）补到
+  1px，1x 与 2x 显示不变。
+
 ## 1.5.1 — 2026-11-05
 
 ### Fixed

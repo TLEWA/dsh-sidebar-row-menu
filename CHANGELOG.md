@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.8.0 — 2026-11-05
+
+### Added
+
+- **Custom settings icon on DSH 0.2.2 and later.** The settings section now
+  registers a navigation icon through the host's `settings.section.icon` slot
+  instead of falling back to the default gear: three rows with a trailing
+  submenu chevron, drawn on the host's 16px grid with a 1.5px rounded stroke and
+  `currentColor`, so it follows the selected/unselected state on its own. On
+  hosts without the slot (0.2.1 and below) the registration is skipped and the
+  settings section keeps working with the host's own glyph.
+
 ## 1.7.0 — 2026-11-05
 
 ### Added

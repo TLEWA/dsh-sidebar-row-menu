@@ -236,8 +236,42 @@ test('apply installs the capture listener and registers session menu entries', (
   assert.ok(overlay, 'the delete dialog must live on shell.overlay');
   assert.equal(overlay.spec.id, 'sidebar-row-menu-delete-dialog');
 
+  // DSH 0.2.2 addresses the settings-nav glyph by the section id itself.
+  const navIcon = ctx.slots.registrations.find(
+    (entry) => entry.spec.name === 'settings.section.icon',
+  );
+  assert.ok(navIcon, 'the settings nav icon must be registered');
+  assert.equal(navIcon.spec.id, 'sidebar-row-menu');
+  const glyph = navIcon.Component({ size: 16, active: true });
+  assert.equal(glyph.type, 'svg');
+  assert.equal(glyph.props.width, 16);
+  assert.equal(glyph.props.height, 16);
+  assert.equal(glyph.props.viewBox, '0 0 16 16');
+  assert.equal(glyph.props.stroke, 'currentColor');
+
   for (const dispose of cleanups) dispose();
   assert.equal(listeners.length, 0);
+});
+
+test('settings icon registration tolerates hosts without the icon slot', () => {
+  const { registration } = loadClient();
+  const exported = registration.factory(makeRequire([], [], []));
+  const ctx = makeCtx();
+  const inject = ctx.slots.inject.bind(ctx.slots);
+  ctx.slots.inject = (name, generator) => {
+    if (name === 'settings.section.icon') throw new Error(`unknown slot: ${name}`);
+    return inject(name, generator);
+  };
+
+  assert.doesNotThrow(() => exported.apply(ctx));
+  assert.ok(
+    ctx.slots.registrations.some((entry) => entry.spec.name === 'settings.section'),
+    'the settings section must still register on 0.2.1',
+  );
+  assert.ok(
+    ctx.slots.registrations.every((entry) => entry.spec.name !== 'settings.section.icon'),
+    'no icon registration may leak through when the slot is missing',
+  );
 });
 
 test('workspace context menu registers ordered providers for 0.2.2', () => {

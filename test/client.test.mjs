@@ -253,10 +253,10 @@ test('workspace context menu registers ordered providers for 0.2.2', () => {
     providers.map((spec) => `${spec.id}:${spec.target}:${spec.order}`),
     [
       'sidebar-row-menu.workspace.new:workspace:90',
-      'sidebar-row-menu.workspace.pinned:workspace:150',
-      'sidebar-row-menu.workspace.open-with:workspace:180',
-      'sidebar-row-menu.workspace.copy:workspace:250',
-      'sidebar-row-menu.workspace.tab:workspace:260',
+      'sidebar-row-menu.workspace.tab:workspace:110',
+      'sidebar-row-menu.workspace.copy:workspace:150',
+      'sidebar-row-menu.workspace.pinned:workspace:210',
+      'sidebar-row-menu.workspace.open-with:workspace:220',
       'sidebar-row-menu.workspace.delete:workspace:310',
     ],
   );
@@ -285,6 +285,9 @@ test('workspace context menu registers ordered providers for 0.2.2', () => {
 
   assert.equal(resolve('new').map((action) => action.id).join(','), 'new-session');
   assert.equal(resolve('copy').map((action) => action.id).join(','), 'copy-path');
+  // 会话菜单的分组分隔线规则：复制/在文件夹显示自成一块，删除组另起一块。
+  assert.equal(resolve('copy')[0].separatorBefore, true);
+  assert.equal(resolve('delete')[0].separatorBefore, false);
   const deleting = resolve('delete');
   assert.equal(deleting.map((action) => action.id).join(','), 'delete-sessions');
   assert.equal(deleting[0].danger, true);

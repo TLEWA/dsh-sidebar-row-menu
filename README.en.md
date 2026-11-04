@@ -42,22 +42,23 @@ its own entries; it does not copy or hardcode any built-in action.
 ### Workspace row
 
 On 0.2.2 the host renders this menu, and the plugin's items interleave with the
-built-in Rename (100), Reveal in file manager (200) and Delete workspace (300):
-New session 90, pinned app 150, Open with 180, Copy workspace path 250, Open in new
-tab 260, Delete workspace and all sessions 310. These items are right-click only by
-default; the row's "…" menu keeps its native content unless you opt entries in under
-Settings → "Also show in the "…" menu → workspace". On 0.2.1 the plugin draws the
-whole menu and runs the official dialogs for Rename and Delete workspace.
+built-in Rename (100), Reveal in file manager (200) and Delete workspace (300),
+using the same grouping rules as the session menu: New session 90, Open in new
+tab 110, Copy workspace path 150, pinned app 210, Open with 220, Delete workspace
+and all sessions 310. These items are right-click only by default; the row's "…"
+menu keeps its native content unless you opt entries in under Settings → "Also
+show in the "…" menu → workspace". On 0.2.1 the plugin draws the whole menu and
+runs the official dialogs for Rename and Delete workspace.
 
 | Item | Behavior |
 | --- | --- |
 | New session | Expands the workspace and starts a session (same as the row's `+`) |
 | Rename (built-in) | Opens the official "Rename workspace" dialog; on 0.2.1 the plugin renders this item itself |
-| Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code") and opens the workspace directory |
-| Open with | A submenu of external apps (editors, terminals, file managers) sharing the session menu's catalog, pinning and toggles; hover expands it |
-| Reveal in file manager (built-in) | Opens the workspace directory in Explorer; provided by the host on 0.2.2, absent on 0.2.1 |
-| Copy workspace path | Copies the directory path |
 | Open in new tab | Only when `dsh-project-tabs` (exposing `openWorkspaceInTab`) is installed |
+| Copy workspace path | Copies the directory path |
+| Reveal in file manager (built-in) | Opens the workspace directory in Explorer; provided by the host on 0.2.2, absent on 0.2.1 |
+| Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code") and opens the workspace directory |
+| Open with | A submenu of external apps (editors, terminals, file managers) sharing the session menu's catalog, pinning and toggles; hover expands it. Host menu items draw no submenu caret, so the plugin appends a "›" to the label; the 0.2.1 self-drawn menu uses an arrow icon |
 | Delete workspace (built-in) | Opens the official delete confirmation; removes only the workspace registration and leaves its sessions under "Ungrouped". On 0.2.1 the plugin renders this item itself |
 | Delete workspace and all sessions | Permanently deletes every session and transcript under the workspace first, then the workspace registration. If any session fails, the workspace is kept so the user can retry. The directory itself is not deleted |
 
@@ -494,9 +495,10 @@ Built against DSH client `0.2.1-rc.5` and `0.2.2` (`ProjectRowItem`,
 menus to a data-driven service, and the plugin picks the path by host capability:
 
 - **0.2.2+**: workspace entries are registered with `ctx.contextMenus.register`
-  (New session 90, pinned app 150, Open with 180, Copy workspace path 250,
-  Open in new tab 260, Delete workspace and all sessions 310), interleaved by
-  order with the native Rename (100), Reveal (200) and Delete workspace (300).
+  (New session 90, Open in new tab 110, Copy workspace path 150, pinned app 210,
+  Open with 220, Delete workspace and all sessions 310), interleaved by
+  order with the native Rename (100), Reveal (200) and Delete workspace (300) and
+  grouped with the same separators as the session menu.
   Right-click and the "…" button share the host's single menu; providers answer only
   during a right-click gesture (or when the matching "Also show in the "…" menu"
   switch is on).

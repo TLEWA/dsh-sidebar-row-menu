@@ -23,6 +23,15 @@
   ~0.4px smear and read as missing. A `min-resolution: 1.2dppx` media query now
   thickens menu separators (and the 0.2.1 `.dsrm-sep`) to 1px in that range, and
   leaves 1x and 2x displays untouched.
+- **The workspace menu follows the session menu's grouping.** On 0.2.2 the entries
+  were interleaved as right-click group → pinned/open-with → copy path, so the
+  separator before "Open with" landed in a different place than in the session
+  menu. The workspace providers now use the session order — row actions, then
+  Copy path/Reveal, then the open-with group, then Delete — so both menus split
+  into the same three blocks.
+- **"Open with" shows its submenu affordance again.** Host menu items draw no
+  caret for submenu parents, so the 0.2.2 workspace entry now ends its label with
+  a "›" (the 0.2.1 self-drawn menu keeps the arrow icon).
 
 ### Changed
 
@@ -45,6 +54,11 @@
 - **125%–150% 缩放下菜单分隔线可见**：宿主用的是 0.5px 细线，在分数像素比下会被
   摊成约 0.4px 而像「消失」；现在该区间内分隔线（含 0.2.1 的 `.dsrm-sep`）补到
   1px，1x 与 2x 显示不变。
+- **工作区菜单改用会话菜单的分组规则**：原来「打开方式」组夹在复制路径之前，分隔线
+  落点与会话菜单不一致；现在顺序为行内动作 → 复制路径/在文件夹显示 → 打开方式组 →
+  删除，两份菜单都分成同样三块。
+- **「打开方式」恢复子菜单提示**：宿主的菜单项不给二级菜单画箭头，0.2.2 的工作区条目
+  在标签末尾补「›」；0.2.1 自绘菜单仍是箭头图标。
 
 ## 1.5.1 — 2026-11-05
 

@@ -58,7 +58,7 @@ runs the official dialogs for Rename and Delete workspace.
 | Copy workspace path | Copies the directory path |
 | Reveal in file manager (built-in) | Opens the workspace directory in Explorer; provided by the host on 0.2.2, absent on 0.2.1 |
 | Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code") and opens the workspace directory |
-| Open with | A submenu of external apps (editors, terminals, file managers) sharing the session menu's catalog, pinning and toggles; hover expands it. Host menu items draw no submenu caret, so the plugin appends a "›" to the label; the 0.2.1 self-drawn menu uses an arrow icon |
+| Open with | A submenu of external apps (editors, terminals, file managers) sharing the session menu's catalog, pinning and toggles; hover expands it. Host menu items draw no submenu caret, so the plugin renders the label as text plus a right-aligned chevron, matching the session menu; the 0.2.1 self-drawn menu uses an arrow icon |
 | Delete workspace (built-in) | Opens the official delete confirmation; removes only the workspace registration and leaves its sessions under "Ungrouped". On 0.2.1 the plugin renders this item itself |
 | Delete workspace and all sessions | Permanently deletes every session and transcript under the workspace first, then the workspace registration. If any session fails, the workspace is kept so the user can retry. The directory itself is not deleted |
 

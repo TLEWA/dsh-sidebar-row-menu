@@ -30,8 +30,10 @@
   Copy path/Reveal, then the open-with group, then Delete — so both menus split
   into the same three blocks.
 - **"Open with" shows its submenu affordance again.** Host menu items draw no
-  caret for submenu parents, so the 0.2.2 workspace entry now ends its label with
-  a "›" (the 0.2.1 self-drawn menu keeps the arrow icon).
+  caret for submenu parents. The action's label is rendered by the host as an
+  element, so the workspace entry now passes a label that lays the text out with
+  a right-aligned chevron, matching the session menu's arrow instead of a "›"
+  glued to the text (the 0.2.1 self-drawn menu keeps its own arrow icon).
 
 ### Changed
 
@@ -57,8 +59,9 @@
 - **工作区菜单改用会话菜单的分组规则**：原来「打开方式」组夹在复制路径之前，分隔线
   落点与会话菜单不一致；现在顺序为行内动作 → 复制路径/在文件夹显示 → 打开方式组 →
   删除，两份菜单都分成同样三块。
-- **「打开方式」恢复子菜单提示**：宿主的菜单项不给二级菜单画箭头，0.2.2 的工作区条目
-  在标签末尾补「›」；0.2.1 自绘菜单仍是箭头图标。
+- **「打开方式」恢复子菜单箭头**：宿主不给子菜单父项画箭头，但 label 是当元素渲染的，
+  所以工作区条目改成「文字 + 右对齐箭头」的 label，与会话菜单的箭头位置一致（不再是
+  贴在文字后面的「›」）；0.2.1 自绘菜单仍用自己的箭头图标。
 
 ## 1.5.1 — 2026-11-05
 

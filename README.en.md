@@ -9,42 +9,59 @@
 
 Right-click menus for the sidebar of [DeepSeek Harness](https://github.com/deepseek-ai) (DSH):
 
-- **Workspace rows** — right-click opens a menu (a reimplementation of
-  `dsh-sidebar-context-menu`'s capabilities);
-- **Session rows nested under a workspace** — right-click opens that row's native
-  "…" menu at the pointer, with the plugin's own entries appended.
+- **Workspace rows** — right-click opens a menu (since DSH 0.2.2 it is part of the
+  host's native menu, the same one the row's "…" button opens);
+- **Session rows nested under a workspace** — right-click opens that row's own menu
+  at the pointer, with the plugin's own entries appended.
 
-The workspace menu is drawn with DSH's official `MenuSurface` + `MenuItemButton`
-(the official `Menu` cannot nest submenus), so rows, icons, danger color and group
-separators reuse the built-in look, and keyboard navigation plus click-outside
-dismissal match the native menus. Session menu content comes from the
-`sidebar.workspaces.session.menu.item` slot — built-in actions and other plugins'
-actions are all there. This plugin only appends its own entries; it does not copy
-or hardcode any built-in action.
+DSH 0.2.2 turned the sidebar context menus into data: the host renders the workspace
+menu and this plugin contributes its items by `order`; the session menu is still
+rendered from its slot by the host, and the host also opens it at the pointer. On
+0.2.2 the look, row height, icons, danger color, keyboard navigation and
+click-outside / Escape dismissal are therefore exactly the built-in menu's — the
+plugin only supplies entries. Hosts before 0.2.2 have no such service: the plugin
+still draws the workspace menu with DSH's official `MenuSurface` + `MenuItemButton`,
+and still moves the row's "…" menu to the pointer on right-click.
 
-> The "…" button menu stays exactly as DSH ships it. The plugin's entries appear
-> only when the menu is opened by right-click. A right-click menu does not
-> close when the pointer leaves it (same as the workspace menu); it closes only on
-> an outside click, an item selection, or Escape.
+Session menu content comes from the `sidebar.workspaces.session.menu.item` slot —
+built-in actions and other plugins' actions are all there. This plugin only appends
+its own entries; it does not copy or hardcode any built-in action.
+
+> The "…" button menu stays exactly as DSH ships it. The plugin's session entries
+> appear only when the menu is opened by right-click. On 0.2.2 both gestures share
+> one host menu, so the plugin tells them apart by the gesture itself: a right-click
+> sets a mark that is released once the menu panel has actually mounted, while the
+> pointerdown on the "…" button clears it immediately. A right-click menu does not
+> close when the pointer leaves it; it closes only on an outside click, an item
+> selection, or Escape.
 
 ## Features
 
 ### Workspace row
 
+On 0.2.2 the host renders this menu, and the plugin's items interleave with the
+built-in Rename (100), Reveal in file manager (200) and Delete workspace (300):
+New session 90, pinned app 150, Open with 180, Copy workspace path 250, Open in new
+tab 260, Delete workspace and all sessions 310. On 0.2.1 the plugin draws the whole
+menu and runs the official dialogs for Rename and Delete workspace.
+
 | Item | Behavior |
 | --- | --- |
 | New session | Expands the workspace and starts a session (same as the row's `+`) |
-| Rename | Opens the official "Rename workspace" dialog |
+| Rename (built-in) | Opens the official "Rename workspace" dialog; on 0.2.1 the plugin renders this item itself |
 | Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code") and opens the workspace directory |
 | Open with | A submenu of external apps (editors, terminals, file managers) sharing the session menu's catalog, pinning and toggles; hover expands it |
+| Reveal in file manager (built-in) | Opens the workspace directory in Explorer; provided by the host on 0.2.2, absent on 0.2.1 |
 | Copy workspace path | Copies the directory path |
 | Open in new tab | Only when `dsh-project-tabs` (exposing `openWorkspaceInTab`) is installed |
-| Delete workspace | Opens the official delete confirmation; removes only the workspace registration and leaves its sessions under "Ungrouped" |
+| Delete workspace (built-in) | Opens the official delete confirmation; removes only the workspace registration and leaves its sessions under "Ungrouped". On 0.2.1 the plugin renders this item itself |
 | Delete workspace and all sessions | Permanently deletes every session and transcript under the workspace first, then the workspace registration. If any session fails, the workspace is kept so the user can retry. The directory itself is not deleted |
 
 ### Session row
 
-Right-click does not build a second menu; it opens the row's own "…" menu:
+Right-click does not build a second menu: on 0.2.2 the host opens the row's native
+menu at the pointer, and on 0.2.1 the plugin triggers the row's "…" menu and moves
+its anchor to the pointer. Either way the content comes from the same slot:
 
 | Source | Entries |
 | --- | --- |
@@ -69,17 +86,21 @@ unarchived sessions alone by default; the opt-in switch extends the single-sessi
 entry to them. Deletion never cascades into forked child sessions.
 
 These entries are **right-click only by default**: they do not mount when the "…"
-button opens the menu. A short-lived window flag is set before opening; outside that
-window the entries render `null`.
+button opens the menu. There is no time window any more; the plugin sets a
+right-click gesture mark and releases it only once the menu panel has actually
+appeared (0.2.2 mounts the menu asynchronously), and the pointerdown on the "…"
+button clears it at once. While the mark is live the entries render normally;
+otherwise they render `null`.
 
 To use them from the row's "…" button, enable them one by one under Settings →
 "Row menu" → "Also show in the "…" menu". Session entries mount into the native
-"…" menu; enabling any workspace entry makes this plugin take over the row's "…"
-button and render the official "Rename / Delete workspace" items alongside the
-enabled plugin entries. With everything off, the "…" button behaves exactly like
-DSH's own.
+"…" menu; on 0.2.1, enabling any workspace entry makes this plugin take over the
+row's "…" button and render the official "Rename / Delete workspace" items alongside
+the enabled plugin entries (on 0.2.2 the host has only one menu, so that group of
+switches is hidden). With everything off, the "…" button behaves exactly like DSH's
+own.
 
-Blank draft sessions have no native "…" menu and are left alone. Rows that are
+Blank draft sessions have no right-click menu and are left alone. Rows that are
 neither a workspace nor a session (e.g. "Show more") are not intercepted.
 
 ### Settings
@@ -93,7 +114,7 @@ Settings → "Row menu" toggles every new entry:
 | Delete session | Hides the single-session delete entry in session menus |
 | Allow deleting unarchived sessions | Off by default; also shows "Delete session permanently" on unarchived rows. Requires the previous switch |
 | Delete all archived sessions | Hides the bulk-delete entry |
-| Also show in the "…" menu → workspace | Adds workspace right-click entries one by one to the row's "…" menu: New session, Open with, Copy workspace path, Open in new tab, Delete workspace and all sessions. Enabling any of them makes this plugin render the "…" menu |
+| Also show in the "…" menu → workspace (0.2.1 only) | Adds workspace right-click entries one by one to the row's "…" menu: New session, Open with, Copy workspace path, Open in new tab, Delete workspace and all sessions. Enabling any of them makes this plugin render the "…" menu |
 | Also show in the "…" menu → session | Adds session right-click entries one by one to the native "…" menu: Open with, Delete session, Delete all archived sessions |
 
 The "Also show in the "…" menu" switches are all off by default; until one is
@@ -101,7 +122,8 @@ enabled the "…" menu is exactly DSH's own.
 
 On DSH 0.2.2 and later, the workspace row's right-click and "…" already open the
 same host menu, so the plugin entries always show up there; the "Also show in the
-"…" menu → workspace" switches only affect 0.2.1 and older hosts.
+"…" menu → workspace" switches only affect 0.2.1 and older hosts, so they are hidden
+on 0.2.2.
 
 Switches live in browser `localStorage` (`dsh.sidebar-row-menu.items.v1`,
 `dsh.sidebar-row-menu.open-with.v1`, `dsh.sidebar-row-menu.open-with.pinned.v1` and
@@ -332,46 +354,72 @@ row components are:
 
 The plugin reads `__reactFiber$` from the event target during the capture phase of
 `contextmenu`, then walks up to 60 `return` links looking for matching
-`memoizedProps`. If nothing matches it does not intercept at all.
+`memoizedProps`. If nothing matches it does not intercept at all. On 0.2.2 the fiber
+is also used to tell whether the row already carries the host's own context menu
+trigger (`memoizedProps.onContextMenu` is a function): if it does, the host opens the
+menu at the pointer by itself and the plugin only drops a gesture mark, never
+touching the event.
 
 ### Why session actions are not hardcoded
 
-The native "…" menu is not a hardcoded button list: it is
+The native session menu is not a hardcoded button list: it is
 `renderSlot('sidebar.workspaces.session.menu.item', ...)`. Fork, pin, archive and
 third-party actions are all slot entries. Slot ownership is enforced by the
 renderer: an entry may only render child slots it declared itself, so a third
 party cannot re-layout someone else's slot.
 
-Therefore a session right-click does exactly one thing: find the `Menu` in the
-row's fiber subtree and trigger its anchor (the ellipsis button). The same slot
-content opens. The plugin's own actions are registered through
-`ctx.slots.inject` + `ctx.slots.register`, so:
+So a session right-click never copies menu content:
+
+- 0.2.2: the row component carries the host's `getTriggerProps` (its `onContextMenu`
+  hands `kind:'session'` to `ctx.contextMenus`), so the host owns the gesture and the
+  plugin does not even need to find a `Menu` or click a button;
+- 0.2.1: find the `Menu` in the row's fiber subtree and trigger its anchor (the
+  ellipsis button), which opens the same slot content.
+
+The plugin's own actions are registered through `ctx.slots.inject` +
+`ctx.slots.register`, so:
 
 - they do not depend on built-in fork/pin entries existing;
 - new entries from DSH or other plugins show up automatically;
 - no built-in action is copied or hardcoded.
 
-Workspace rows have no such slot, so their menu is still composed by this plugin.
-The official `Menu` accepts only a flat `items` list and cannot express submenus, so
-the workspace menu is drawn with `MenuSurface` + `MenuItemButton`: rows, icons,
-danger styling and separators reuse the official controls.
+Workspace rows have no such slot on 0.2.1, so their menu is composed by this plugin.
+Since 0.2.2 the host provides `ctx.contextMenus` and the workspace items become data
+contributions — again just "adding its own items to the host's menu". The official
+`Menu` accepts only a flat `items` list and cannot express submenus, so the 0.2.1
+workspace menu is drawn with `MenuSurface` + `MenuItemButton`: rows, icons, danger
+styling and separators reuse the official controls.
 
 ### Why the session menu appears at the pointer
 
-The official `Menu` anchors to the ellipsis button, i.e. to the right of it. On
-right-click the plugin temporarily points that button's (and two ancestors')
+On 0.2.2 there is nothing to do: the host's `onContextMenu` passes `clientX /
+clientY` to `ctx.contextMenus.open()`, and the panel renders at the pointer.
+
+On 0.2.1 the official `Menu` anchors to the ellipsis button, i.e. to the right of it.
+On right-click the plugin temporarily points that button's (and two ancestors')
 `getBoundingClientRect` at the pointer as a `0×0` rect. `Menu` re-reads the anchor
 rect every frame, so the panel lands next to the cursor. The original methods are
 restored as soon as the panel leaves `body`, so the button menu keeps its normal
 position.
 
-The "…" menu and the right-click menu share one `Menu` instance and one slot
-content; the only difference is the `rightClickMenuUntil` window — the plugin's
-entries mount only inside it, and the window is cleared when the menu closes.
+### Why the right-click entries never show in the "…" menu
 
-### Why the workspace menu is mounted imperatively
+On 0.2.2 both gestures open the same host menu, and React cannot tell where it came
+from, so the plugin watches the gesture: a right-click sets an in-process mark, and a
+`MutationObserver` waits for a new `[role="menu"]` panel to appear (0.2.2 mounts the
+menu asynchronously, after every provider is ready); once the panel shows up the mark
+is released 400 ms later, with a 3 s fallback in case another plugin swallows the
+gesture. The `pointerdown` on the row's "…" button clears the mark immediately, and
+only trusted input counts (`isTrusted`) — the synthetic `pointerdown` the plugin
+re-dispatches is not a gesture.
 
-A contextmenu event is not part of React's render flow. The workspace menu creates
+Entries read the mark once while mounting, so a slow panel does not matter, and the
+mark only lives until "the panel for this gesture appeared", never into the next one.
+
+### Why the 0.2.1 menu is mounted imperatively
+
+On 0.2.2 the host mounts every menu and the plugin creates no container. On 0.2.1 a
+contextmenu event is not part of React's render flow, so the workspace menu creates
 a `0×0`, `z-index:2147483647` host on demand and `createRoot`s a self-drawn panel;
 after mount it measures once and clamps its corner into the viewport, then unmounts
 and removes the host on close. The session menu mounts nothing new; it only opens
@@ -426,9 +474,9 @@ The package declares its supported DSH range in `package.json` as
 incompatible installs, and the plugin market shows it as the supported version;
 0.3 and later need re-verification before the upper bound is raised.
 
-Built against DSH client `0.2.1-rc.5` (`ProjectRowItem`, `SessionNodeItem`,
-`Menu`). DSH 0.2.2 moved the sidebar context menus to data-driven
-`ctx.contextMenus`, and the plugin picks the path by host capability:
+Built against DSH client `0.2.1-rc.5` and `0.2.2` (`ProjectRowItem`,
+`SessionNodeItem`, `Menu`, `contextMenus`). DSH 0.2.2 moved the sidebar context
+menus to a data-driven service, and the plugin picks the path by host capability:
 
 - **0.2.2+**: workspace entries are registered with `ctx.contextMenus.register`
   (New session 90, pinned app 150, Open with 180, Copy workspace path 250,
@@ -450,12 +498,14 @@ If a DSH upgrade changes those row components or the menu positioning:
 ## Known limitations
 
 - On 0.2.1 the plugin depends on the props shape of the built-in row components.
-  From 0.2.2 the workspace entries use `contextMenus`; the session entries still
-  rely on the legacy extension point. If DSH changes the corresponding
-  implementation, right-click may silently do nothing.
-- Session right-click depends on the row's `Menu` staying in the fiber subtree. If
-  it is not found, the plugin clicks the row-actions ellipsis button; failing that
-  it gives up — it never builds a competing menu and never triggers row open.
+  From 0.2.2 the workspace entries use `contextMenus`, the session entries still
+  use the legacy extension point, and `memoizedProps.onContextMenu` decides whether
+  the host has taken the row over. If DSH changes that implementation, right-click
+  may silently do nothing.
+- On 0.2.1 session right-click depends on the row's `Menu` staying in the fiber
+  subtree. If it is not found, the plugin clicks the row-actions ellipsis button;
+  failing that it gives up — it never builds a competing menu and never triggers row
+  open. On 0.2.2 no fallback is needed: the host is the trigger.
 - Permanent deletion is offered for **archived** sessions by default; enable
   "Allow deleting unarchived sessions" to delete unarchived sessions from their
   right-click menu as well. Deletion does not cascade into forked child sessions —

@@ -2,7 +2,7 @@
   "name": "dsh-sidebar-row-menu",
   "version": "1.5.1",
   "type": "module",
-  "description": "DSH sidebar right-click menus: a self-composed menu for workspace rows, and the native slot menu opened at the pointer for session rows, with open-with and archived-session cleanup.",
+  "description": "Adds open-with and cleanup entries to the DSH sidebar context menus: interleaved with the built-in workspace menu and extending the session menu at the pointer on DSH 0.2.2+, with a self-drawn workspace menu on 0.2.1.",
   "keywords": [
     "deepseek",
     "dsh",

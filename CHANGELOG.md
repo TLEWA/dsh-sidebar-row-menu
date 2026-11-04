@@ -16,6 +16,15 @@
   ellipsis click: the row already carries the host trigger, so the host opens its
   own menu at the pointer (no anchor rewriting, no synthetic click).
 
+### Changed
+
+- **Docs and registry metadata describe the 0.2.2 behavior.** README (both languages),
+  the npm description and the marketplace entry no longer present the plugin as a
+  self-drawn sidebar menu. They now state that DSH 0.2.2 renders the menus and the
+  plugin contributes entries (workspace items interleaved by `order`, session rows
+  extended in the host menu opened at the pointer), and that 0.2.1 keeps the
+  self-drawn workspace menu.
+
 ### 中文摘要
 
 - **修复 0.2.2 上会话行右键菜单「有时没有插件条目」**：条目原来用 `contextmenu`
@@ -25,6 +34,9 @@
   打开的菜单仍然保持原生内容。
   0.2.2 上也不再拦截 `contextmenu` 后转成「…」点击：行本身已带宿主触发器，直接
   由宿主把菜单开在指针处（不改锚点、不补发点击）。
+- **文档与市场文案改为描述 0.2.2 的真实行为**：README（中英）、npm 描述与市场条目
+  不再写成「插件自绘侧栏菜单」，而是说明 0.2.2 由宿主渲染菜单、插件按 `order` 贡献
+  条目（工作区项混排、会话行扩展宿主开在指针处的菜单），0.2.1 上保留自绘工作区菜单。
 
 ## 1.5.0 — 2026-11-05
 

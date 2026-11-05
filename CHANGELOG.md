@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.10.0 — 2026-11-06
+
+### 中文摘要
+
+- **工作区可以单独设置新会话的默认权限。** 工作区右键菜单新增「新会话默认权限」二级
+  菜单，列出宿主原生的权限预设（仅可查看 / 工作区内修改 / 完全权限），当前生效的一项
+  右侧打勾；选择后只影响该工作区之后新建的会话，已有会话不动。「跟随全局默认」清除
+  本工作区的设置。设置存在 `$DSH_HOME/storages/dsh-sidebar-row-menu/permission-defaults.json`，
+  由宿主插件在会话创建时通过 `permissionPresets` 原生接口落成会话事件，不靠客户端改默认值。
+- **菜单条目可以只放进「…」菜单。** 设置 →「行菜单」→「菜单显示位置」把原来
+  「同时放进「…」菜单」的开关改成三态：右键菜单 / 「…」菜单 / 两边，每个条目至少保留
+  一边；旧配置自动迁移（开 → 两边，关 → 右键菜单）。
+
+### Changed
+
+- **A workspace can now set the default permission for its new sessions.** The
+  workspace context menu gains a "Default permission for new sessions" submenu listing
+  the host's native presets (read-only / workspace-write / danger-full-access) with the
+  effective one checked. The choice applies only to sessions created afterwards in
+  that workspace and never touches existing sessions; "Follow global default" clears
+  it. The mapping is stored in
+  `$DSH_HOME/storages/dsh-sidebar-row-menu/permission-defaults.json`, and the host
+  plugin applies it through the native `permissionPresets` service when a session is
+  created, so it is recorded as a normal permission event rather than by mutating the
+  client default.
+- **Entries can live only in the "…" menu.** Settings → "Row menu" → "Menu placement"
+  replaces the old "Also show in the '…' menu" switches with a tri-state choice per
+  entry (right-click / "…" / both), always keeping at least one side; existing
+  settings migrate automatically (on → both, off → right-click).
+
 ## 1.9.3 — 2026-11-06
 
 ### 中文摘要

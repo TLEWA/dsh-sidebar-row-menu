@@ -1,6 +1,6 @@
 {
   "name": "dsh-sidebar-row-menu",
-  "version": "1.9.3",
+  "version": "1.10.0",
   "type": "module",
   "description": "Adds open-with and cleanup entries to the DSH sidebar context menus (interleaved on 0.2.2+, self-drawn workspace menu on 0.2.1), plus a conversation-body right-click menu that mirrors the session header toolbar with in-menu open-with and more-actions submenus.",
   "keywords": [
@@ -61,7 +61,7 @@
   "scripts": {
     "test": "node --test test/host.test.mjs test/manifest.test.mjs test/client.test.mjs",
     "test:local": "node --test --test-isolation=none test/host.test.mjs test/manifest.test.mjs test/client.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js && node --check lib/host/session-delete.js && node --check lib/host/workspace-delete.js",
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js && node --check lib/host/permission-defaults.js && node --check lib/host/session-delete.js && node --check lib/host/workspace-delete.js",
     "build": "npm pack",
     "marketplace:check": "node scripts/marketplace-preflight.mjs",
     "prepack": "npm run check",

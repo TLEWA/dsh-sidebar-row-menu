@@ -7,7 +7,7 @@ import test from 'node:test';
 const clientPath = fileURLToPath(new URL('../lib/client.js', import.meta.url));
 const source = readFileSync(clientPath, 'utf8');
 
-function loadClient(stored = {}) {
+function loadClient(stored = {}, options = {}) {
   let registration;
   const listeners = [];
   const hosts = [];
@@ -69,6 +69,7 @@ function loadClient(stored = {}) {
     localStorage,
     console,
     URL,
+    fetch: options.fetch,
     PointerEvent: class PointerEvent {
       constructor(type, init = {}) {
         this.type = type;
@@ -297,6 +298,7 @@ test('workspace context menu registers ordered providers for 0.2.2', () => {
       'sidebar-row-menu.workspace.copy:workspace:150',
       'sidebar-row-menu.workspace.pinned:workspace:210',
       'sidebar-row-menu.workspace.open-with:workspace:220',
+      'sidebar-row-menu.workspace.permission:workspace:225',
       'sidebar-row-menu.workspace.delete:workspace:310',
     ],
   );
@@ -305,6 +307,7 @@ test('workspace context menu registers ordered providers for 0.2.2', () => {
     .filter((entry) => entry.spec.name === 'contextMenu.icon')
     .map((entry) => entry.spec.key);
   assert.ok(iconKeys.includes('sidebar-row-menu.open-with'), 'the open-with entry needs an icon slot');
+  assert.ok(iconKeys.includes('sidebar-row-menu.permission'), 'the permission entry needs an icon slot');
   assert.ok(iconKeys.includes('sidebar-row-menu.archive'), 'the show-archived entry needs an icon slot');
   assert.ok(iconKeys.includes('sidebar-row-menu.archive-off'), 'the hide-archived entry needs an icon slot');
 
@@ -347,6 +350,110 @@ test('workspace context menu registers ordered providers for 0.2.2', () => {
 
   // Unknown targets resolve to nothing rather than throwing.
   assert.equal(providers[0].resolve({}).length, 0);
+});
+
+test('menu placement can keep an entry only in the native ellipsis menu', () => {
+  const PLACEMENT_KEY = 'dsh.sidebar-row-menu.placement.v1';
+  const { registration } = loadClient({
+    [PLACEMENT_KEY]: JSON.stringify({ newSession: 'ellipsis', copyPath: 'context' }),
+  });
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+  });
+  exported.apply(ctx);
+
+  const target = { workspaceId: 'w1', path: 'C:\\work', displayTitle: 'Demo' };
+  const resolve = (key) => providers.find((spec) => spec.id.endsWith(`.${key}`)).resolve(target);
+  // 没有右键手势：ellipsis-only 的条目仍出现，context-only 的不出现。
+  assert.equal(resolve('new').map((action) => action.id).join(','), 'new-session');
+  assert.equal(resolve('copy').length, 0);
+});
+
+test('workspace permission submenu lists native presets and marks the effective one', async () => {
+  const posted = [];
+  const fetch = async (_url, init = {}) => {
+    if (init.method === 'POST') {
+      const body = JSON.parse(init.body);
+      posted.push(body);
+      return {
+        ok: true,
+        json: async () => ({ ok: true, defaults: body.preset === null ? {} : { w1: body.preset } }),
+      };
+    }
+    return { ok: true, json: async () => ({ ok: true, defaults: { w1: 'danger-full-access' } }) };
+  };
+  const { registration } = loadClient({
+    'dsh.sidebar-row-menu.placement.v1': JSON.stringify({ permissionDefault: 'ellipsis' }),
+  }, { fetch });
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+    remote: {
+      permissionPresets: {
+        catalog: async () => ({
+          ok: true,
+          value: {
+            options: [
+              { value: 'read-only', name: 'Read only' },
+              { value: 'workspace-write', name: 'Workspace write' },
+              { value: 'danger-full-access', name: 'Full access' },
+            ],
+            defaultPreset: 'workspace-write',
+          },
+        }),
+      },
+    },
+  });
+  exported.apply(ctx);
+
+  const target = { workspaceId: 'w1', path: 'C:\\work', displayTitle: 'Demo' };
+  const resolve = () => providers.find((spec) => spec.id.endsWith('.permission')).resolve(target);
+  await new Promise((done) => setTimeout(done, 0));
+  await new Promise((done) => setTimeout(done, 0));
+
+  const action = resolve()[0];
+  assert.equal(action.id, 'new-session-permission');
+  assert.deepEqual(
+    Array.from(action.children, (child) => child.id),
+    ['preset-read-only', 'preset-workspace-write', 'preset-danger-full-access', 'permission-follow-global'],
+  );
+  // 工作区覆盖为 danger-full-access，勾在第三项；其它项没有勾。
+  assert.equal(action.children[2].label.props.children[1].props.className, 'dsrm-check');
+  assert.equal(action.children[0].label.props.children[1], null);
+
+  action.children[0].run();
+  await new Promise((done) => setTimeout(done, 0));
+  assert.deepEqual(posted.at(-1), { workspaceId: 'w1', preset: 'read-only' });
+  const afterPick = resolve()[0];
+  assert.equal(afterPick.children[0].label.props.children[1].props.className, 'dsrm-check');
+  assert.equal(afterPick.children[2].label.props.children[1], null);
+
+  afterPick.children.at(-1).run();
+  await new Promise((done) => setTimeout(done, 0));
+  assert.deepEqual(posted.at(-1), { workspaceId: 'w1', preset: null });
+});
+
+test('settings render two placement switches per entry', () => {
+  const PLACEMENT_KEY = 'dsh.sidebar-row-menu.placement.v1';
+  const texts = settingsTree({ contextMenus: { register: () => () => {} } }, {
+    [PLACEMENT_KEY]: JSON.stringify({ newSession: 'ellipsis' }),
+  });
+  assert.ok(texts.includes('settings.placement.context'));
+  assert.ok(texts.includes('settings.placement.ellipsis'));
+  assert.ok(texts.includes('settings.ellipsis.permissionDefault.label'));
 });
 
 test('workspace entries can be opted into the native ellipsis menu', () => {

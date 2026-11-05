@@ -27,13 +27,14 @@ Session menu content comes from the `sidebar.workspaces.session.menu.item` slot 
 built-in actions and other plugins' actions are all there. This plugin only appends
 its own entries; it does not copy or hardcode any built-in action.
 
-> The "…" button menu stays exactly as DSH ships it. The plugin's entries appear
-> only when the menu is opened by right-click — on 0.2.2 that holds for workspace
-> and session rows alike, and each entry can be opted into the "…" menu in Settings.
+> The plugin's entries appear in the right-click menu by default. Settings → "Row
+> menu" → "Menu placement" can move each entry to the "…" menu only, or show it in
+> both (at least one side always stays on).
 > On 0.2.2 both gestures share
 > one host menu, so the plugin tells them apart by the gesture itself: a right-click
 > sets a mark that is released once the menu panel has actually mounted, while the
-> pointerdown on the "…" button clears it immediately. A right-click menu does not
+> pointerdown on the "…" button clears it immediately. The "…" menu therefore only
+> carries entries placed there (or on both sides). A right-click menu does not
 > close when the pointer leaves it; it closes only on an outside click, an item
 > selection, or Escape.
 
@@ -45,9 +46,10 @@ On 0.2.2 the host renders this menu, and the plugin's items interleave with the
 built-in Rename (100), Reveal in file manager (200) and Delete workspace (300),
 using the same grouping rules as the session menu: New session 90, Open in new
 tab 110, archived-session toggle 130, Copy workspace path 150, pinned app 210,
-Open with 220, Delete workspace and all sessions 310. These items are right-click only by default; the row's "…"
-menu keeps its native content unless you opt entries in under Settings → "Also
-show in the "…" menu → workspace". On 0.2.1 the plugin draws the whole menu and
+Open with 220, default permission for new sessions 225, Delete workspace and all
+sessions 310. These items are right-click only by default; the row's "…"
+menu keeps its native content unless you place entries under Settings → "Row
+menu" → "Menu placement". On 0.2.1 the plugin draws the whole menu and
 runs the official dialogs for Rename and Delete workspace.
 
 | Item | Behavior |
@@ -60,6 +62,7 @@ runs the official dialogs for Rename and Delete workspace.
 | Reveal in file manager (built-in) | Opens the workspace directory in Explorer; provided by the host on 0.2.2, absent on 0.2.1 |
 | Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code") and opens the workspace directory |
 | Open with | A submenu of external apps (editors, terminals, file managers) sharing the session menu's catalog, pinning and toggles; hover expands it. Host menu items draw no submenu caret, so the plugin renders the label as text plus a right-aligned chevron, matching the session menu; the 0.2.1 self-drawn menu uses an arrow icon |
+| Default permission for new sessions | A submenu of the host's native permission presets (read-only / workspace-write / danger-full-access). The chosen preset becomes the default for **sessions created afterwards in this workspace**; the effective one is checked on the right, and "Follow global default" clears the per-workspace value. Existing sessions are never changed |
 | Delete workspace (built-in) | Opens the official delete confirmation; removes only the workspace registration and leaves its sessions under "Ungrouped". On 0.2.1 the plugin renders this item itself |
 | Delete workspace and all sessions | Permanently deletes every session and transcript under the workspace first, then the workspace registration. If any session fails, the workspace is kept so the user can retry. The directory itself is not deleted |
 
@@ -91,25 +94,19 @@ Both delete entries are served by this plugin's own host route. They leave
 unarchived sessions alone by default; the opt-in switch extends the single-session
 entry to them. Deletion never cascades into forked child sessions.
 
-These entries are **right-click only by default**: they do not mount when the "…"
-button opens the menu. There is no time window any more; the plugin sets a
-right-click gesture mark and releases it only once the menu panel has actually
-appeared (0.2.2 mounts the menu asynchronously), and the pointerdown on the "…"
-button clears it at once. While the mark is live the entries render normally;
-otherwise they render `null`.
+These entries appear in the **right-click menu** by default. To use them from the
+row's "…" button, set each one under Settings → "Row menu" → "Menu placement":
 
-To use them from the row's "…" button, enable them one by one under Settings →
-"Row menu" → "Also show in the "…" menu":
+- "…" menu: the entry appears only in the row's "…" menu and leaves the
+  right-click menu;
+- "Both": it appears on both sides;
+- "Right-click menu": the default, right-click only.
 
-- session entries mount into the native "…" menu;
-- workspace entries on 0.2.2: the host menu is data-driven, so an enabled entry skips
-  the gesture check and appears in the "…" menu; with everything off that menu keeps
-  only the native items;
-- workspace entries on 0.2.1: enabling any of them makes this plugin take over the
-  row's "…" button and render the official "Rename / Delete workspace" items
-  alongside the enabled plugin entries.
-
-With everything off, the "…" button behaves exactly like DSH's own.
+Every entry must keep at least one side, so the switch for the last active side is
+locked. Session entries and workspace entries (0.2.2) share the same
+`contextMenus` providers and use the gesture mark to tell which menu is being
+rendered; on 0.2.1 the plugin takes over the row's "…" button and draws the
+workspace menu itself with the same placement rules.
 
 Blank draft sessions have no right-click menu and are left alone. Rows that are
 neither a workspace nor a session (e.g. "Show more") are not intercepted.
@@ -167,24 +164,27 @@ Settings → "Row menu" toggles every new entry:
 | Allow deleting unarchived sessions | Off by default; also shows "Delete session permanently" on unarchived rows. Requires the previous switch |
 | Delete all archived sessions | Hides the bulk-delete entry |
 | Show archived sessions | Hides the workspace "Show / hide archived sessions" entry (on by default; the entry itself only appears when that workspace has archived sessions) |
-| Also show in the "…" menu → workspace | Adds workspace right-click entries one by one to the row's "…" menu: New session, Open with, Copy workspace path, Open in new tab, archived-session toggle, Delete workspace and all sessions. On 0.2.1 enabling any of them makes this plugin render the "…" menu |
-| Also show in the "…" menu → session | Adds session right-click entries one by one to the native "…" menu: Open with, Delete session, Delete all archived sessions |
+| Menu placement → workspace | Per-entry choice between the right-click menu, the "…" menu, or both: New session, Default permission for new sessions, Open with, Copy workspace path, Open in new tab, archived-session toggle, Delete workspace and all sessions |
+| Menu placement → session | Per-entry choice for session-row entries: Open with, Delete session, Delete all archived sessions |
 | Enable blank-space context menu | Master switch for the conversation-body right-click menu (blank space, thinking blocks, replies; on by default); when off, that area keeps the browser/host native menu |
 | Pin "More" to the far right | On by default; keeps a "More actions" style overflow trigger as the last row regardless of its current toolbar position |
 | Show top-left status widgets | Off by default; also lists everything in the header's `conversation.session.header.actions` slot (Session cost, background-job counter, …) in the conversation-body menu |
 
-The "Also show in the "…" menu" switches are all off by default; until one is
-enabled the "…" menu is exactly DSH's own.
+Every placement defaults to "Right-click menu", so untouched installs keep the "…"
+menu exactly as DSH ships it.
 
-On DSH 0.2.2 and later the "…" button and right-click share one host menu, yet the
-plugin's entries still appear only on right-click; flipping a switch also puts that
-entry into the "…" menu. On 0.2.1 workspace rows have no host menu to contribute to,
-so the plugin takes over the "…" button and draws the menu itself.
+On DSH 0.2.2 and later the "…" button and right-click share one host menu; the
+plugin tells them apart by the gesture mark, and only entries placed in "…" or
+"Both" join that menu. On 0.2.1 workspace rows have no host menu to contribute to,
+so the plugin takes over the "…" button and draws the menu itself with the same
+placement rules.
 
 Switches live in browser `localStorage` (`dsh.sidebar-row-menu.items.v1`,
 `dsh.sidebar-row-menu.open-with.v1`, `dsh.sidebar-row-menu.open-with.pinned.v1`,
-`dsh.sidebar-row-menu.ellipsis.v1` and `dsh.sidebar-row-menu.blank-menu.v1`)
-and apply immediately. Before the first explicit pin, the plugin derives one: the
+`dsh.sidebar-row-menu.placement.v1` and `dsh.sidebar-row-menu.blank-menu.v1`)
+and apply immediately. The legacy `dsh.sidebar-row-menu.ellipsis.v1` booleans are
+migrated on first load (true → "Both", false → "Right-click menu"). Before the
+first explicit pin, the plugin derives one: the
 first detected editor (usually VS Code), or the first catalog app when no editor
 exists.
 
@@ -486,8 +486,8 @@ mark only lives until "the panel for this gesture appeared", never into the next
 Workspace rows on 0.2.2 take a different path: the host menu is built from each
 `ctx.contextMenus.register` provider's `resolve`, which has no React entry to read the
 mark, so the provider checks the same mark while resolving. The "…" pointerdown
-clears it before the host resolves, hence the entries show on right-click only; the
-"Also show in the "…" menu → workspace" switches make the provider skip that check.
+clears it before the host resolves, so the provider returns entries for the
+right-click side or the "…" side according to each entry's "Menu placement".
 
 ### Why the conversation-body menu sorts by screen position
 
@@ -593,12 +593,12 @@ menus to a data-driven service, and the plugin picks the path by host capability
 
 - **0.2.2+**: workspace entries are registered with `ctx.contextMenus.register`
   (New session 90, Open in new tab 110, Copy workspace path 150, pinned app 210,
-  Open with 220, Delete workspace and all sessions 310), interleaved by
+  Open with 220, default permission for new sessions 225, Delete workspace and all
+  sessions 310), interleaved by
   order with the native Rename (100), Reveal (200) and Delete workspace (300) and
   grouped with the same separators as the session menu.
-  Right-click and the "…" button share the host's single menu; providers answer only
-  during a right-click gesture (or when the matching "Also show in the "…" menu"
-  switch is on).
+  Right-click and the "…" button share the host's single menu; providers answer per
+  entry according to the right-click gesture and that entry's "Menu placement".
 - **0.2.1**: no `contextMenus` service, so the plugin keeps drawing its own
   workspace menu.
 - **Session rows**: 0.2.2 still supports the

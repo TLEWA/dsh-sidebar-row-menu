@@ -7,8 +7,12 @@ import test from 'node:test';
 
 import {
   apply,
+  applyWorkspacePermission,
+  createPermissionDefaultsStore,
+  handlePermissionDefaultsRequest,
   inspectOpenPath,
   isLoopbackRequest,
+  readPermissionDefaults,
   removeSessions,
   toVscodeFileUrl,
 } from '../lib/index.js';
@@ -421,4 +425,133 @@ test('workspace delete route keeps the workspace when a session fails to delete'
   assert.equal(result.body.workspaceDeleted, false);
   assert.deepEqual(calls, []);
   assert.equal(existsSync(join(dir, 'ws-kept')), true);
+});
+
+const PERMISSION_URL = '/dsh-sidebar-row-menu/permission-defaults';
+
+test('permission defaults store sanitizes, persists and clears entries', () => {
+  const file = join(dir, 'permission-store.json');
+  const store = createPermissionDefaultsStore(file);
+  assert.deepEqual(store.read(), {});
+  assert.deepEqual(store.set('w1', 'workspace-write'), { w1: 'workspace-write' });
+  assert.deepEqual(store.set('w2', 'read-only'), { w1: 'workspace-write', w2: 'read-only' });
+  assert.deepEqual(createPermissionDefaultsStore(file).read(), {
+    w1: 'workspace-write',
+    w2: 'read-only',
+  });
+  assert.deepEqual(store.set('w1', null), { w2: 'read-only' });
+  assert.equal(existsSync(`${file}.tmp`), false);
+  assert.equal(readPermissionDefaults(file).w2, 'read-only');
+  writeFileSync(file, '{oops');
+  assert.deepEqual(createPermissionDefaultsStore(file).read(), {});
+});
+
+test('permission defaults route reads, validates and writes the mapping', async () => {
+  const store = createPermissionDefaultsStore(join(dir, 'permission-route.json'));
+  const ctx = {
+    get(name) {
+      if (name === 'permissionPresets') {
+        return {
+          names: ['read-only', 'workspace-write', 'danger-full-access', 'custom'],
+          catalog: () => ({
+            options: [
+              { value: 'read-only', name: 'Read only' },
+              { value: 'workspace-write', name: 'Workspace write' },
+            ],
+            defaultPreset: 'workspace-write',
+          }),
+        };
+      }
+      return undefined;
+    },
+  };
+  const route = {
+    handler: (request, response) => handlePermissionDefaultsRequest(request, response, ctx, store),
+  };
+
+  const read = await call(route, { url: PERMISSION_URL, method: 'GET' });
+  assert.equal(read.status, 200);
+  assert.deepEqual(read.body, {
+    ok: true,
+    defaults: {},
+    catalog: {
+      options: [
+        { value: 'read-only', name: 'Read only' },
+        { value: 'workspace-write', name: 'Workspace write' },
+      ],
+      defaultPreset: 'workspace-write',
+    },
+  });
+  assert.equal((await call(route, { url: PERMISSION_URL, remote: '10.0.0.5' })).status, 403);
+  assert.equal((await call(route, { url: '/dsh-sidebar-row-menu/nope' })).status, 404);
+  assert.equal((await call(route, { url: PERMISSION_URL, method: 'PUT' })).status, 405);
+  assert.equal((await call(route, { url: PERMISSION_URL, body: {} })).status, 400);
+  assert.equal((await call(route, { url: PERMISSION_URL, body: { workspaceId: 'w1' } })).status, 400);
+  assert.equal(
+    (await call(route, { url: PERMISSION_URL, body: { workspaceId: 'w1', preset: 'nope' } })).status,
+    400,
+  );
+
+  const written = await call(route, {
+    url: PERMISSION_URL,
+    body: { workspaceId: 'w1', preset: 'danger-full-access' },
+  });
+  assert.equal(written.status, 200);
+  assert.deepEqual(written.body, { ok: true, defaults: { w1: 'danger-full-access' } });
+
+  const cleared = await call(route, {
+    url: PERMISSION_URL,
+    body: { workspaceId: 'w1', preset: null },
+  });
+  assert.equal(cleared.status, 200);
+  assert.deepEqual(cleared.body.defaults, {});
+});
+
+test('workspace permission applies on agent creation for the matching workspace only', () => {
+  const store = createPermissionDefaultsStore(join(dir, 'permission-apply.json'));
+  store.set('w1', 'workspace-write');
+  const applied = [];
+  const ctx = {
+    get(name) {
+      if (name === 'workspaceRegistry') {
+        return { list: () => [{ id: 'w1', path: 'C:\\Work\\Project' }] };
+      }
+      if (name === 'permissionPresets') {
+        return {
+          names: ['read-only', 'workspace-write', 'danger-full-access', 'custom'],
+          set(session, preset) { applied.push([session.header.id, preset]); },
+        };
+      }
+      return undefined;
+    },
+  };
+  const session = {
+    header: {
+      id: 's1',
+      cwd: 'c:/work/project/',
+      origin: undefined,
+      isSeeded: false,
+    },
+  };
+
+  assert.equal(applyWorkspacePermission(ctx, { source: 'startup', agent: { session } }, store), true);
+  assert.deepEqual(applied, [['s1', 'workspace-write']]);
+
+  applied.length = 0;
+  assert.equal(applyWorkspacePermission(ctx, { source: 'resume', agent: { session } }, store), false);
+  assert.equal(
+    applyWorkspacePermission(ctx, {
+      source: 'startup',
+      agent: { session: { header: { ...session.header, origin: 'subagent' } } },
+    }, store),
+    false,
+  );
+  assert.equal(
+    applyWorkspacePermission(ctx, {
+      source: 'startup',
+      agent: { session: { header: { ...session.header, cwd: 'C:\\Other' } } },
+    }, store),
+    false,
+  );
+  assert.deepEqual(applied, []);
 });

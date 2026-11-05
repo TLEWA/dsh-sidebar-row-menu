@@ -140,9 +140,11 @@ the original button's icon:
 - a "More" style overflow trigger is pinned to the last row (can be switched off in
   Settings); buttons the organizer tucked into "More actions" do not show up on their
   own;
-- cost / usage entries such as "Session cost", and job status entries such as
-  "1 background job running", are hidden by default (they are text-only and open a
-  panel); turn on "Show status and cost" in Settings to list them;
+- the status widgets in the top-left corner of the session header (the
+  `conversation.session.header.actions` slot: "Session cost", the background-job
+  counter, …) are left out as a whole; turn on "Show top-left status widgets" in
+  Settings to list them. The rule looks at the slot, not at labels, so status widgets
+  that DSH or other plugins add there later stay hidden by default too;
 - selecting an ordinary row is a real click: the menu closes, then a `click` is
   dispatched to the original header button, so "Find", "Toggle bottom panel" and
   friends still open their native popovers;
@@ -169,7 +171,7 @@ Settings → "Row menu" toggles every new entry:
 | Also show in the "…" menu → session | Adds session right-click entries one by one to the native "…" menu: Open with, Delete session, Delete all archived sessions |
 | Enable blank-space context menu | Master switch for the conversation-body right-click menu (blank space, thinking blocks, replies; on by default); when off, that area keeps the browser/host native menu |
 | Pin "More" to the far right | On by default; keeps a "More actions" style overflow trigger as the last row regardless of its current toolbar position |
-| Show status and cost | Off by default; also lists status entries such as "Session cost" and "1 background job running" in the conversation-body menu |
+| Show top-left status widgets | Off by default; also lists everything in the header's `conversation.session.header.actions` slot (Session cost, background-job counter, …) in the conversation-body menu |
 
 The "Also show in the "…" menu" switches are all off by default; until one is
 enabled the "…" menu is exactly DSH's own.

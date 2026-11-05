@@ -1195,7 +1195,7 @@ test('blank conversation right-click lists header buttons left-to-right with Mor
   const openWith = makeToolbarButton('打开方式', 416);
   more.group = 'utilities';
   find.group = 'utilities';
-  openWith.group = 'actions';
+  openWith.group = 'utilities';
   installFakeHeader(document, [more, find, openWith]);
 
   exported.apply(makeCtx());
@@ -1357,7 +1357,7 @@ test('right-click on a thinking header inside a message still opens the menu', (
   assert.equal(roots.length, 1);
 });
 
-test('status entries (cost meter, background jobs) stay hidden until enabled', () => {
+test('header actions slot entries stay hidden until enabled', () => {
   for (const enabled of [false, true]) {
     const stored = enabled
       ? { 'dsh.sidebar-row-menu.blank-menu.v1': JSON.stringify({ showCostMeter: true }) }
@@ -1369,9 +1369,10 @@ test('status entries (cost meter, background jobs) stay hidden until enabled', (
     const roots = [];
     const exported = registration.factory(makeRequire([], roots, []));
 
-    const cost = makeToolbarButton('本会话费用明细', 333, { className: 'cm-btn cm-stat-entry' });
+    // 不靠标签识别：任意两个 actions 槽位组件都应被整体隐藏。
+    const cost = makeToolbarButton('本会话费用明细', 333);
     cost.group = 'actions';
-    const jobs = makeToolbarButton('1 个后台任务运行中', 400, { className: 'Ag-ohG_trigger' });
+    const jobs = makeToolbarButton('1 个后台任务运行中', 400);
     jobs.group = 'actions';
     const find = makeToolbarButton('查找', 646);
     find.group = 'utilities';

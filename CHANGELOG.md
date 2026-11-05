@@ -4,19 +4,23 @@
 
 ### 中文摘要
 
-- **「N 个后台任务运行中」也默认不出现在会话正文右键菜单里。** 1.9.1 只隐藏了
-  「本会话费用明细」，但 DSH 内置的后台任务计数入口（有任务运行时才出现）同样属于
-  状态入口，现在一并隐藏。设置 →「行菜单」里的开关改名为「显示状态与费用」，打开后
-  费用明细和后台任务计数都会恢复；存储字段不变，旧配置照常生效。
+- **会话栏左上角的状态组件整体不进正文右键菜单。** 1.9.1 只隐藏了「本会话费用明细」，
+  但 DSH 内置的后台任务计数（有任务运行时才出现）同样挂在会话栏左上角，现在按槽位
+  统一处理：`conversation.session.header.actions` 里的组件一律视为状态入口，默认隐藏，
+  不逐个认标签。设置 →「行菜单」的开关改名为「显示左上角状态组件」，打开后费用明细、
+  后台任务计数等一起恢复；存储字段不变，旧配置照常生效。
 
 ### Changed
 
-- **Background-job counters are hidden from the conversation-body menu by
-  default too.** 1.9.1 only hid "Session cost", but DSH's built-in job counter
-  (shown while jobs run) is also a status entry and is now hidden as well. The
-  Settings → row menu switch is renamed to "Show status and cost"; turning it on
-  restores both cost details and job counters. The stored field is unchanged, so
-  existing settings keep working.
+- **Status widgets in the top-left corner of the session header are excluded from
+  the conversation-body menu as a group.** 1.9.1 only hid "Session cost", but DSH's
+  built-in background-job counter (shown while jobs run) lives in the same corner.
+  The rule is positional: everything injected into
+  `conversation.session.header.actions` counts as a status widget and is hidden by
+  default, with no per-label matching. The Settings → row menu switch is renamed to
+  "Show top-left status widgets"; turning it on restores cost details, job counters
+  and anything else added to that slot. The stored field is unchanged, so existing
+  settings keep working.
 
 ## 1.9.1 — 2026-11-06
 

@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.9.1 — 2026-11-06
+
+### 中文摘要
+
+- **「本会话费用明细」默认不再出现在会话正文右键菜单里。** 这类费用 / 用量统计入口
+  只有文字、点开是统计面板，和工具条按钮不同类，所以默认不列出。设置 →「行菜单」
+  新增「显示费用明细」开关（默认关闭），需要时打开即可恢复；旧配置里没有这个字段时
+  也按默认关闭处理，不用清缓存。
+
+### Changed
+
+- **Session cost entries are no longer listed in the conversation-body menu by
+  default.** Cost / usage stats entries such as "Session cost" are text-only and open
+  a stats panel, so they are now treated differently from toolbar buttons and stay
+  hidden. A new "Show cost details" switch under Settings → row menu (off by default)
+  brings them back; existing saved settings without the new field also default to
+  hidden.
+
 ## 1.9.0 — 2026-11-06
 
 ### 中文摘要

@@ -1255,7 +1255,9 @@ test('selecting a toolbar entry clicks the real header button', () => {
 });
 
 test('blank menu separates header slots and the pinned More with native separators', () => {
-  const harness = loadClient();
+  const harness = loadClient({
+    'dsh.sidebar-row-menu.blank-menu.v1': JSON.stringify({ showCostMeter: true }),
+  });
   const { registration, listeners, window, document } = harness;
   window.innerWidth = 1200;
   window.innerHeight = 800;
@@ -1353,6 +1355,34 @@ test('right-click on a thinking header inside a message still opens the menu', (
   const event = fireContextMenu(listener, makeConversationTarget({ message: true, button: true }));
   assert.equal(event.defaultPrevented, true);
   assert.equal(roots.length, 1);
+});
+
+test('the cost meter row stays hidden until the setting enables it', () => {
+  for (const enabled of [false, true]) {
+    const stored = enabled
+      ? { 'dsh.sidebar-row-menu.blank-menu.v1': JSON.stringify({ showCostMeter: true }) }
+      : {};
+    const harness = loadClient(stored);
+    const { registration, listeners, window, document } = harness;
+    window.innerWidth = 1200;
+    window.innerHeight = 800;
+    const roots = [];
+    const exported = registration.factory(makeRequire([], roots, []));
+
+    const cost = makeToolbarButton('本会话费用明细', 333, { className: 'cm-btn cm-stat-entry' });
+    cost.group = 'actions';
+    const find = makeToolbarButton('查找', 646);
+    find.group = 'utilities';
+    installFakeHeader(document, [cost, find]);
+
+    exported.apply(makeCtx());
+    const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+    fireContextMenu(listener, makeConversationTarget());
+
+    const labels = toolbarRows(roots).map((row) => row.props.children);
+    assert.equal(labels.includes('本会话费用明细'), enabled);
+    assert.equal(labels.includes('查找'), true);
+  }
 });
 
 test('the More submenu follows the organizer host-menu order', () => {

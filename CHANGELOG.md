@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.9.2 — 2026-11-06
+
+### 中文摘要
+
+- **「N 个后台任务运行中」也默认不出现在会话正文右键菜单里。** 1.9.1 只隐藏了
+  「本会话费用明细」，但 DSH 内置的后台任务计数入口（有任务运行时才出现）同样属于
+  状态入口，现在一并隐藏。设置 →「行菜单」里的开关改名为「显示状态与费用」，打开后
+  费用明细和后台任务计数都会恢复；存储字段不变，旧配置照常生效。
+
+### Changed
+
+- **Background-job counters are hidden from the conversation-body menu by
+  default too.** 1.9.1 only hid "Session cost", but DSH's built-in job counter
+  (shown while jobs run) is also a status entry and is now hidden as well. The
+  Settings → row menu switch is renamed to "Show status and cost"; turning it on
+  restores both cost details and job counters. The stored field is unchanged, so
+  existing settings keep working.
+
 ## 1.9.1 — 2026-11-06
 
 ### 中文摘要

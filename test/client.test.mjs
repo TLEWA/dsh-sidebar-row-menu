@@ -1357,7 +1357,7 @@ test('right-click on a thinking header inside a message still opens the menu', (
   assert.equal(roots.length, 1);
 });
 
-test('the cost meter row stays hidden until the setting enables it', () => {
+test('status entries (cost meter, background jobs) stay hidden until enabled', () => {
   for (const enabled of [false, true]) {
     const stored = enabled
       ? { 'dsh.sidebar-row-menu.blank-menu.v1': JSON.stringify({ showCostMeter: true }) }
@@ -1371,9 +1371,11 @@ test('the cost meter row stays hidden until the setting enables it', () => {
 
     const cost = makeToolbarButton('本会话费用明细', 333, { className: 'cm-btn cm-stat-entry' });
     cost.group = 'actions';
+    const jobs = makeToolbarButton('1 个后台任务运行中', 400, { className: 'Ag-ohG_trigger' });
+    jobs.group = 'actions';
     const find = makeToolbarButton('查找', 646);
     find.group = 'utilities';
-    installFakeHeader(document, [cost, find]);
+    installFakeHeader(document, [cost, jobs, find]);
 
     exported.apply(makeCtx());
     const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
@@ -1381,6 +1383,7 @@ test('the cost meter row stays hidden until the setting enables it', () => {
 
     const labels = toolbarRows(roots).map((row) => row.props.children);
     assert.equal(labels.includes('本会话费用明细'), enabled);
+    assert.equal(labels.includes('1 个后台任务运行中'), enabled);
     assert.equal(labels.includes('查找'), true);
   }
 });

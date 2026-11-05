@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.9.3 — 2026-11-06
+
+### 中文摘要
+
+- **二级菜单贴着屏幕右边缘时不再飞出去。** 之前子菜单按估算宽度（220）算位置，
+  贴右边缘向左翻转时会和菜单之间空出一大截、还竖直跑到触发行上方。现在子菜单
+  先测真实尺寸再定位：翻转后横向留 6px 间距、纵向和触发行齐平，箭头方向跟着翻转；
+  底边 / 顶边超出屏幕时会被夹回视口内。主菜单定位也改成量真实宽高（原来是按入场
+  动画中途的偏小尺寸夹取，贴右边缘会溢出几个像素），窗口 resize 或菜单行数变化会
+  重新定位。
+
+### Changed
+
+- **Submenus no longer fly off when opened against the right screen edge.** The
+  previous code estimated the submenu width (220px), so a left-flip near the edge left
+  a large gap from the menu and landed above the trigger row. The submenu is now
+  measured and then positioned: 6px horizontal gap when flipped, vertically aligned
+  with the trigger row, and its chevron mirrors to match. Panels are clamped back into
+  the viewport at the top and bottom edges. Menu surfaces also measure their real size
+  (the old code measured mid-animation, which let them overflow by a few pixels at the
+  right edge), and reposition on window resize or row-count changes.
+
 ## 1.9.2 — 2026-11-06
 
 ### 中文摘要

@@ -1,6 +1,6 @@
 {
   "name": "dsh-sidebar-row-menu",
-  "version": "1.9.2",
+  "version": "1.9.3",
   "type": "module",
   "description": "Adds open-with and cleanup entries to the DSH sidebar context menus (interleaved on 0.2.2+, self-drawn workspace menu on 0.2.1), plus a conversation-body right-click menu that mirrors the session header toolbar with in-menu open-with and more-actions submenus.",
   "keywords": [

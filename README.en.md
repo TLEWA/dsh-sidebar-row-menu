@@ -114,13 +114,49 @@ With everything off, the "…" button behaves exactly like DSH's own.
 Blank draft sessions have no right-click menu and are left alone. Rows that are
 neither a workspace nor a session (e.g. "Show more") are not intercepted.
 
+### Right-click in the conversation body
+
+Right-clicking in the conversation body — blank space, thinking blocks, replies and tool
+summaries (but not the composer, the header toolbar or tool cards themselves) — opens a
+vertical menu that lists that toolbar in **visual** left-to-right order, each row carrying
+the original button's icon:
+
+- with `dsh-sidebar-organizer` installed and a customised "session header toolbar"
+  layout, the menu follows its order; otherwise it is DSH's default order. The
+  organizer reorders with CSS `order`, so DOM order is not screen order — the menu
+  sorts by `getBoundingClientRect()` at right-click time;
+- "Open with" is collapsed exactly like the workspace and session menus: pinned apps
+  become top-level rows (e.g. "Open with Visual Studio Code") and the remaining apps
+  move into an "Open with ›" submenu that expands on hover or click. The "Open with"
+  master switch, per-app switches and pinning all apply; turning the master switch off
+  removes the whole group;
+- "More actions" no longer opens the header "…" popover: it expands in place like the
+  other submenus and mirrors the host menu's entries (Copy session as Markdown, Download
+  session log, Feedback, …), and picking one runs it immediately. Its row order follows
+  `dsh-sidebar-organizer` too: dragging rows inside the "…" popover saves the order to
+  `dsh.sidebar-organizer.host-menu-order.v1`, and this submenu re-sorts with it;
+- sections are separated by faint rules automatically, and row height, padding,
+  radius, 13px type and 14px icons match DSH's native context menus;
+- a "More" style overflow trigger is pinned to the last row (can be switched off in
+  Settings); buttons the organizer tucked into "More actions" do not show up on their
+  own;
+- selecting an ordinary row is a real click: the menu closes, then a `click` is
+  dispatched to the original header button, so "Find", "Toggle bottom panel" and
+  friends still open their native popovers;
+- a text selection wins: the plugin stays out of the way and lets the browser's
+  selection menu appear; inputs and links inside messages also keep their native menu;
+  tool cards, the composer, the toolbar itself and sidebar rows keep their own native
+  context menus;
+- when no usable toolbar button can be found (a draft session, or every button
+  hidden), the plugin leaves the native menu alone.
+
 ### Settings
 
 Settings → "Row menu" toggles every new entry:
 
 | Switch | Effect |
 | --- | --- |
-| Open with | Hides "Open with" and every pinned app from workspace and session menus |
+| Open with | Hides "Open with" and every pinned app from workspace, session and conversation-body menus |
 | Open with → applications | Hides individual applications; the adjacent "Pin" button promotes an app to the top level |
 | Delete session | Hides the single-session delete entry in session menus |
 | Allow deleting unarchived sessions | Off by default; also shows "Delete session permanently" on unarchived rows. Requires the previous switch |
@@ -128,6 +164,8 @@ Settings → "Row menu" toggles every new entry:
 | Show archived sessions | Hides the workspace "Show / hide archived sessions" entry (on by default; the entry itself only appears when that workspace has archived sessions) |
 | Also show in the "…" menu → workspace | Adds workspace right-click entries one by one to the row's "…" menu: New session, Open with, Copy workspace path, Open in new tab, archived-session toggle, Delete workspace and all sessions. On 0.2.1 enabling any of them makes this plugin render the "…" menu |
 | Also show in the "…" menu → session | Adds session right-click entries one by one to the native "…" menu: Open with, Delete session, Delete all archived sessions |
+| Enable blank-space context menu | Master switch for the conversation-body right-click menu (blank space, thinking blocks, replies; on by default); when off, that area keeps the browser/host native menu |
+| Pin "More" to the far right | On by default; keeps a "More actions" style overflow trigger as the last row regardless of its current toolbar position |
 
 The "Also show in the "…" menu" switches are all off by default; until one is
 enabled the "…" menu is exactly DSH's own.
@@ -138,8 +176,8 @@ entry into the "…" menu. On 0.2.1 workspace rows have no host menu to contribu
 so the plugin takes over the "…" button and draws the menu itself.
 
 Switches live in browser `localStorage` (`dsh.sidebar-row-menu.items.v1`,
-`dsh.sidebar-row-menu.open-with.v1`, `dsh.sidebar-row-menu.open-with.pinned.v1` and
-`dsh.sidebar-row-menu.ellipsis.v1`)
+`dsh.sidebar-row-menu.open-with.v1`, `dsh.sidebar-row-menu.open-with.pinned.v1`,
+`dsh.sidebar-row-menu.ellipsis.v1` and `dsh.sidebar-row-menu.blank-menu.v1`)
 and apply immediately. Before the first explicit pin, the plugin derives one: the
 first detected editor (usually VS Code), or the first catalog app when no editor
 exists.
@@ -445,6 +483,46 @@ mark, so the provider checks the same mark while resolving. The "…" pointerdow
 clears it before the host resolves, hence the entries show on right-click only; the
 "Also show in the "…" menu → workspace" switches make the provider skip that check.
 
+### Why the conversation-body menu sorts by screen position
+
+Toolbar order is not in the DOM: `dsh-sidebar-organizer` reorders with
+`element.style.order`, and tucking an icon into "More actions" changes DOM
+visibility. The conversation-body menu therefore caches nothing; at right-click time
+it walks the `conversation.session.header` actions / utilities / corner slots, takes
+each slot's direct children, flattens the buttons inside them (a split control
+becomes its main button and its chevron), sorts by
+`getBoundingClientRect().left`, and finally moves "More" to the end when that
+switch is on. Organizer layouts, width-driven collapsing and temporarily hidden
+buttons are all reflected automatically.
+
+Selecting a row does not duplicate the action: it closes the plugin menu, waits one
+tick, then dispatches `click` to the original header button, so host popovers stay
+anchored to their real trigger. "More actions" is the exception — its button only
+opens a host popover, so the menu walks the React fiber upwards (up to 8 levels) to
+the host Menu's `items` / `onSelect`, renders the second level itself and calls
+`onSelect(id)` directly.
+
+Hit testing only accepts targets inside `conversation.session` that are outside the
+header, composer, tool cards and interactive elements; inside a message node,
+right-clicks are allowed (thinking blocks, replies, tool summaries) and only inputs,
+links and `contenteditable` yield. A non-empty `window.getSelection()` also yields,
+leaving the selection menu to the browser. When nothing matches, the event is left
+untouched and the native menu opens as before.
+
+"Open with" is a split control in the toolbar (main button plus chevron), so
+flattening it would produce two rows. Collection therefore detects the split first
+(two or more buttons, a split-ish container class, or a chevron labelled "More open
+with"), tags that unit as the open-with group, and rendering reuses the workspace /
+session menu treatment: the app catalog comes from `useApps` / `usePinned` /
+`useChildren`, pinned apps render as top-level rows and the rest go into the
+"Open with" submenu positioned by `submenuGeometry`. The session's `cwd` comes from
+the selected row (`[data-row-key^="session:"][aria-selected="true"]`, falling back to
+the sessions store row with `retainedBy.mainView > 0`); if the catalog or `cwd` is not
+ready yet, the original split buttons are shown instead. When the logical section
+changes (open-with / actions / utilities / corner / More), the next row gets
+`separatorBefore`; the rule matches native menus (0.5px, 3px 8px margins, 12% white)
+along with row height, padding and 14px icons.
+
 ### Why the 0.2.1 menu is mounted imperatively
 
 On 0.2.2 the host mounts every menu and the plugin creates no container. On 0.2.1 a
@@ -547,6 +625,12 @@ If a DSH upgrade changes those row components or the menu positioning:
 - The open-with directory for a session comes from `sessions.list`'s `cwd`,
   falling back to the workspace directory. Ungrouped sessions may have no
   directory; in that case a "no directory available" toast is shown.
+- The conversation-body menu depends on the DOM of the three session-header slots
+  (`conversation.session.header.actions` / `.utilities` / `.corner`) and on the
+  host Menu's React fiber behind "More actions" (the second-level menu reads its
+  items / onSelect). If DSH changes those extension points or the fiber shape, the
+  affected menu silently falls back to native behaviour and still does not affect
+  messages, the composer or the toolbar's own menus.
 
 ## License and notices
 

@@ -1092,3 +1092,348 @@ test('the row action button hides the right-click entries for its own menu', () 
   });
   assert.equal(entry.Component(SESSION_ITEM_PROPS), null);
 });
+
+/* --------------------------------------- blank conversation context menu */
+
+/** A fake conversation-body target for the blank-space handler. */
+function makeConversationTarget({ blocked = false, message = false, button = false } = {}) {
+  const session = {};
+  const blocker = blocked ? {} : null;
+  const node = message ? {} : null;
+  const buttonEl = button ? {} : null;
+  return {
+    nodeType: 1,
+    closest(selector) {
+      const text = String(selector);
+      if (text.includes('data-row-key')) return null;
+      if (text === '[data-slot="conversation.session"]') return session;
+      if (text.includes('conversation.chat.node')) return node;
+      if (text.includes('role="button"')) return buttonEl;
+      if (text.includes('conversation.composer')
+        || text.includes('conversation.header')
+        || text.includes('tool.call.toolview')) {
+        return blocker;
+      }
+      return null;
+    },
+  };
+}
+
+function makeToolbarButton(label, left, options = {}) {
+  const button = {
+    nodeType: 1,
+    disabled: false,
+    className: options.className ?? '',
+    textContent: '',
+    clicks: 0,
+    getAttribute(name) {
+      if (name === 'aria-label') return label;
+      return null;
+    },
+    matches(selector) {
+      return String(selector).startsWith('button');
+    },
+    querySelector() {
+      return null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+    getBoundingClientRect() {
+      const width = options.width ?? 28;
+      return { left, top: 10, width, height: 24, right: left + width, bottom: 34 };
+    },
+    click() {
+      button.clicks += 1;
+    },
+  };
+  return button;
+}
+
+/** Install a fake session header + document.querySelectorAll on the harness. */
+function installFakeHeader(document, buttons) {
+  const actions = { children: buttons.filter((button) => button.group === 'actions') };
+  const utilities = { children: buttons.filter((button) => button.group !== 'actions') };
+  const header = {
+    querySelector(selector) {
+      if (String(selector).includes('header.actions')) return actions;
+      if (String(selector).includes('header.utilities')) return utilities;
+      return null;
+    },
+    closest() {
+      return header;
+    },
+    getBoundingClientRect() {
+      return { left: 280, top: 0, width: 412, height: 76, right: 692, bottom: 76 };
+    },
+  };
+  const slot = { closest: () => header, parentElement: header };
+  document.querySelectorAll = (selector) => (
+    String(selector) === '[data-slot="conversation.session.header"]' ? [slot] : []
+  );
+  return header;
+}
+
+function toolbarRows(roots) {
+  const entry = [...roots].reverse().find((candidate) => (
+    candidate.host.__element?.type?.name === 'HeaderToolbarMenu'
+  ));
+  assert.ok(entry, 'a toolbar menu root should have been mounted');
+  const element = entry.host.__element;
+  return element.type(element.props).props.children.props.children;
+}
+
+test('blank conversation right-click lists header buttons left-to-right with More last', () => {
+  const harness = loadClient();
+  const { registration, listeners, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const more = makeToolbarButton('更多操作', 502, { className: 'K0RNnq_moreButton' });
+  const find = makeToolbarButton('查找', 646);
+  const openWith = makeToolbarButton('打开方式', 416);
+  more.group = 'utilities';
+  find.group = 'utilities';
+  openWith.group = 'actions';
+  installFakeHeader(document, [more, find, openWith]);
+
+  exported.apply(makeCtx());
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  const event = fireContextMenu(listener, makeConversationTarget());
+
+  assert.equal(event.defaultPrevented, true);
+  const rows = toolbarRows(roots);
+  assert.equal(rows.map((row) => row.props.children).join(','), '打开方式,查找,更多操作');
+});
+
+test('blank conversation menu keeps the toolbar order when More is not pinned last', () => {
+  const harness = loadClient({
+    'dsh.sidebar-row-menu.blank-menu.v1': JSON.stringify({ keepMoreLast: false }),
+  });
+  const { registration, listeners, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const more = makeToolbarButton('更多操作', 450, { className: 'K0RNnq_moreButton' });
+  const find = makeToolbarButton('查找', 646);
+  more.group = 'utilities';
+  find.group = 'utilities';
+  installFakeHeader(document, [more, find]);
+
+  exported.apply(makeCtx());
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+
+  assert.equal(toolbarRows(roots).map((row) => row.props.children).join(','), '更多操作,查找');
+});
+
+test('selecting a toolbar entry clicks the real header button', () => {
+  const harness = loadClient();
+  const { registration, listeners, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  window.setTimeout = (fn) => {
+    fn();
+    return 0;
+  };
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+
+  exported.apply(makeCtx());
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+
+  const rows = toolbarRows(roots);
+  rows[0].props.onSelect();
+  assert.equal(find.clicks, 1);
+  assert.equal(roots[0].host.__unmounted, true);
+});
+
+test('blank menu separates header slots and the pinned More with native separators', () => {
+  const harness = loadClient();
+  const { registration, listeners, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const cost = makeToolbarButton('本会话费用明细', 333);
+  const find = makeToolbarButton('查找', 646);
+  const more = makeToolbarButton('更多操作', 502, { className: 'K0RNnq_moreButton' });
+  cost.group = 'actions';
+  find.group = 'utilities';
+  more.group = 'utilities';
+  installFakeHeader(document, [cost, find, more]);
+
+  exported.apply(makeCtx());
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+
+  const rows = toolbarRows(roots);
+  assert.equal(rows.map((row) => row.props.children).join(','), '本会话费用明细,查找,更多操作');
+  assert.equal(rows.map((row) => row.props.separatorBefore).join(','), 'false,true,true');
+});
+
+test('blank menu leaves the composer and disabled settings alone', () => {
+  const harness = loadClient({ 'dsh.sidebar-row-menu.blank-menu.v1': JSON.stringify({ enabled: false }) });
+  const { registration, listeners, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+
+  exported.apply(makeCtx());
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+
+  const disabled = fireContextMenu(listener, makeConversationTarget());
+  assert.equal(disabled.defaultPrevented, false);
+  assert.equal(roots.length, 0);
+
+  const message = fireContextMenu(listener, makeConversationTarget({ blocked: true }));
+  assert.equal(message.defaultPrevented, false);
+  assert.equal(roots.length, 0);
+});
+
+test('right-click inside a message opens the blank menu unless text is selected', () => {
+  const openHarness = loadClient();
+  const openWindow = openHarness.window;
+  openWindow.innerWidth = 1200;
+  openWindow.innerHeight = 800;
+  openWindow.getSelection = () => ({ toString: () => '' });
+  const openRoots = [];
+  const openRegistration = openHarness.registration.factory(makeRequire([], openRoots, []));
+  const findOpen = makeToolbarButton('查找', 646);
+  findOpen.group = 'utilities';
+  installFakeHeader(openHarness.document, [findOpen]);
+
+  openRegistration.apply(makeCtx());
+  const openListener = openHarness.listeners.find((entry) => entry.type === 'contextmenu').listener;
+  const opened = fireContextMenu(openListener, makeConversationTarget());
+  assert.equal(opened.defaultPrevented, true);
+  assert.equal(openRoots.length, 1);
+
+  const selectedHarness = loadClient();
+  const selectedWindow = selectedHarness.window;
+  selectedWindow.innerWidth = 1200;
+  selectedWindow.innerHeight = 800;
+  selectedWindow.getSelection = () => ({ toString: () => '选中的引用' });
+  const selectedRoots = [];
+  const selectedRegistration = selectedHarness.registration.factory(makeRequire([], selectedRoots, []));
+  const findSelected = makeToolbarButton('查找', 646);
+  findSelected.group = 'utilities';
+  installFakeHeader(selectedHarness.document, [findSelected]);
+
+  selectedRegistration.apply(makeCtx());
+  const selectedListener = selectedHarness.listeners.find((entry) => entry.type === 'contextmenu').listener;
+  const skipped = fireContextMenu(selectedListener, makeConversationTarget());
+  assert.equal(skipped.defaultPrevented, false);
+  assert.equal(selectedRoots.length, 0);
+});
+
+test('right-click on a thinking header inside a message still opens the menu', () => {
+  const harness = loadClient();
+  const { registration, listeners, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+
+  exported.apply(makeCtx());
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  const event = fireContextMenu(listener, makeConversationTarget({ message: true, button: true }));
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(roots.length, 1);
+});
+
+test('the More submenu follows the organizer host-menu order', () => {
+  const harness = loadClient({
+    'dsh.sidebar-organizer.host-menu-order.v1': JSON.stringify([
+      '反馈',
+      '复制会话为 Markdown',
+      '下载 Session 日志',
+    ]),
+  });
+  const { registration, listeners, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+
+  const more = makeToolbarButton('更多操作', 502, { className: 'K0RNnq_moreButton' });
+  more.group = 'utilities';
+  more['__reactFiber$test'] = {
+    memoizedProps: {
+      items: [
+        { id: 'copy', label: '复制会话为 Markdown' },
+        { id: 'download', label: '下载 Session 日志' },
+        { id: 'feedback', label: '反馈' },
+      ],
+      onSelect: () => {},
+    },
+    return: null,
+  };
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [more, find]);
+
+  exported.apply(makeCtx());
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+
+  const rows = toolbarRows(roots);
+  const row = rows.find((entry) => entry.props.children === '更多操作');
+  assert.ok(row, 'More row should be present');
+  assert.equal(
+    row.props.controller.items.map((item) => item.label).join(','),
+    '反馈,复制会话为 Markdown,下载 Session 日志',
+  );
+});
+
+test('the More row renders its own submenu from the host menu items', () => {
+  const harness = loadClient();
+  const { registration, listeners, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+
+  const more = makeToolbarButton('更多操作', 502, { className: 'K0RNnq_moreButton' });
+  more.group = 'utilities';
+  more['__reactFiber$test'] = {
+    memoizedProps: {
+      items: [
+        { id: 'copy', label: '复制会话为 Markdown' },
+        { id: 'download', label: '下载 Session 日志' },
+      ],
+      onSelect: () => {},
+    },
+    return: null,
+  };
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [more, find]);
+
+  exported.apply(makeCtx());
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+
+  const rows = toolbarRows(roots);
+  const row = rows.find((entry) => entry.props.children === '更多操作');
+  assert.ok(row, 'More row should be present');
+  assert.equal(row.type.name, 'BlankMoreRows');
+  assert.equal(
+    row.props.controller.items.map((item) => item.label).join(','),
+    '复制会话为 Markdown,下载 Session 日志',
+  );
+  assert.equal(more.clicks, 0, 'the host More button should not be clicked');
+});

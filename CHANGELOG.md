@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.9.0 — 2026-11-06
+
+### 中文摘要
+
+- **新增「会话正文右键菜单」**：在会话正文里（空白处、思考过程、回复和工具摘要，输入框、
+  工具条和工具卡片本身以外）右键，会按顶部工具条的**视觉顺序**从左到右列出那排按钮，
+  每项带原按钮的图标；「更多操作」一类的溢出入口默认固定在最后一项。装了
+  `dsh-sidebar-organizer` 且调整过「会话头部工具条」时，顺序跟随它的配置；没装时就是
+  DSH 的默认顺序。organizer 用 CSS `order` 排序，DOM 顺序不代表屏幕顺序，所以菜单按
+  `getBoundingClientRect()` 现算。点普通条目等于点原按钮：先关菜单再派发 `click`，
+  宿主弹层仍锚在原按钮上；「更多操作」则不再打开右上角的「…」，而是像「打开方式」
+  一样在本菜单里展开二级菜单，直接复刻宿主菜单的条目并执行，行序同样跟随
+  `dsh-sidebar-organizer`（它在「…」弹层里拖动后保存的 host-menu-order）。有选中
+  文字时让位给浏览器的选区菜单，消息里的输入控件和链接也保留原生菜单；工具卡片、
+  输入框、工具条本身和侧栏行同样保留各自的原生右键菜单；找不到可用按钮时不接管
+  原生菜单。设置 →「行菜单」
+  里可以关闭整个菜单，或取消「更多」固定最后。
+- **空白菜单里的「打开方式」按工作区 / 会话右键的方式收纳**：置顶应用显示为一级行，
+  其余应用收进「打开方式」二级菜单（悬浮或点击展开），设置里的总开关、逐应用开关和
+  置顶全部生效；同时菜单的分组之间自动加淡色分隔线，行高、内边距、圆角、字号和图标
+  尺寸都与 DSH 原生右键菜单对齐。
+
+### Added
+
+- **Right-click menu in the conversation body.** Right-clicking in the conversation
+  body — blank space, thinking blocks, replies and tool summaries, but not the
+  composer, the header toolbar or tool cards themselves — now opens a vertical menu
+  that lists that toolbar in visual left-to-right order, each row reusing the
+  original button's icon; a "More actions" style overflow trigger is pinned to the
+  last row by default. With `dsh-sidebar-organizer` installed and a customised
+  "session header toolbar" layout the order follows the organizer; otherwise it is
+  DSH's default order. The organizer reorders with CSS `order`, so DOM order is not
+  screen order — the menu sorts by `getBoundingClientRect()` at right-click time.
+  Selecting an ordinary row closes the menu and dispatches a real `click` to the
+  original header button, so host popovers stay anchored to their trigger.
+  "More actions" no longer opens the header "…" popover: it expands in place like
+  the other submenus, mirrors the host menu's entries and runs the selected one;
+  its row order follows `dsh-sidebar-organizer`'s saved host-menu order as well.
+  A text selection wins and receives the browser's selection menu; inputs and links
+  inside messages also keep their native menu, as do tool cards, the composer, the
+  toolbar itself and sidebar rows. No usable button means the native menu is left
+  alone. The menu and the pin-More-last behaviour can both be switched off under
+  Settings → row menu.
+- **"Open with" inside the blank-space menu is collapsed like the workspace and
+  session menus.** Pinned apps render as top-level rows and the remaining apps move
+  into an "Open with" submenu that expands on hover or click; the master switch,
+  per-app switches and pinning all apply. Sections are now separated by faint rules
+  automatically, and row height, padding, radius, type size and icon size match
+  DSH's native context menus.
+
 ## 1.8.0 — 2026-11-05
 
 ### 中文摘要

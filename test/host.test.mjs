@@ -547,13 +547,19 @@ test('permission defaults route reads, validates and writes the mapping', async 
 });
 
 test('workspace permission applies on agent creation for the matching workspace only', () => {
+  // 路径匹配遵循平台规则（Windows 不分大小写、POSIX 区分），用当前平台的写法，
+  // 否则这条用例在 Linux CI 上会用 Windows 路径得出相反结果。
+  const workspacePath = process.platform === 'win32' ? 'C:\\Work\\Project' : '/Work/Project';
+  const sessionCwd = process.platform === 'win32' ? 'c:/work/project/' : '/Work/Project/';
+  const childCwd =
+    process.platform === 'win32' ? 'C:\\Work\\Project\\pkg\\src' : '/Work/Project/pkg/src';
   const store = createPermissionDefaultsStore(join(dir, 'permission-apply.json'));
   store.set('w1', 'workspace-write');
   const applied = [];
   const ctx = {
     get(name) {
       if (name === 'workspaceRegistry') {
-        return { list: () => [{ id: 'w1', path: 'C:\\Work\\Project' }] };
+        return { list: () => [{ id: 'w1', path: workspacePath }] };
       }
       if (name === 'permissionPresets') {
         return {
@@ -567,7 +573,7 @@ test('workspace permission applies on agent creation for the matching workspace 
   const session = {
     header: {
       id: 's1',
-      cwd: 'c:/work/project/',
+      cwd: sessionCwd,
       origin: undefined,
       isSeeded: false,
     },
@@ -598,7 +604,7 @@ test('workspace permission applies on agent creation for the matching workspace 
   assert.equal(
     applyWorkspacePermission(ctx, {
       source: 'startup',
-      agent: { session: { header: { ...session.header, cwd: 'C:\\Work\\Project\\pkg\\src' } } },
+      agent: { session: { header: { ...session.header, cwd: childCwd } } },
     }, store),
     true,
   );

@@ -28,7 +28,10 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
-      - name: Syntax check
+      - name: Install dev dependencies
+        run: npm ci
+
+      - name: Syntax check and client bundle freshness
         run: npm run check
 
       - name: Test
@@ -50,6 +53,7 @@ jobs:
             package/lib/client.js \
             package/lib/host/route.js \
             package/cordis.patch.yml \
+            package/AGENTS.md \
             package/README.md \
             package/README.en.md \
             package/NOTICE.md \

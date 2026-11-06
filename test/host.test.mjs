@@ -93,6 +93,7 @@ function createRoute(services) {
 /** Build a host ctx whose session services are scripted by the test. */
 function createDeleteContext({ headers = [], live, calls = [], workspace } = {}) {
   let route;
+  let listCalls = 0;
   const ctx = {
     effect(fn) {
       fn();
@@ -126,6 +127,7 @@ function createDeleteContext({ headers = [], live, calls = [], workspace } = {})
       if (name === 'sessionQuery') {
         return {
           async listSessions() {
+            listCalls += 1;
             return headers.map((header) => ({ header }));
           },
         };
@@ -160,7 +162,7 @@ function createDeleteContext({ headers = [], live, calls = [], workspace } = {})
     },
   };
   apply(ctx);
-  return { route, calls };
+  return { route, calls, listCalls: () => listCalls };
 }
 
 function seedSession(id) {
@@ -214,6 +216,28 @@ test('route validates the path before spawning anything', async () => {
   assert.equal(file.body.error, 'path-not-directory');
 });
 
+test('route survives a response whose socket is already closed', async () => {
+  const route = createRoute();
+  const request = Readable.from([Buffer.from(JSON.stringify({ target: 'explorer', path: dir }))]);
+  request.method = 'POST';
+  request.url = '/dsh-sidebar-row-menu/open';
+  request.headers = { host: '127.0.0.1:10102' };
+  request.socket = { remoteAddress: '127.0.0.1' };
+  const response = {
+    statusCode: 0,
+    setHeader() {
+      throw new Error('socket closed');
+    },
+    end() {
+      throw new Error('socket closed');
+    },
+  };
+
+  await assert.doesNotReject(async () => {
+    await route.handler(request, response);
+  });
+});
+
 const DELETE_URL = '/dsh-sidebar-row-menu/session/delete';
 
 test('delete route rejects bad requests and unreachable hosts', async () => {
@@ -247,13 +271,28 @@ test('delete route removes a cold session transcript and clears ledger entries',
   const result = await call(route, { url: DELETE_URL, body: { sessionIds: ['cold-session'] } });
 
   assert.equal(result.status, 200);
-  assert.deepEqual(result.body, { ok: true, deleted: 1, failed: 0, error: '' });
+  assert.deepEqual(result.body, { ok: true, deleted: 1, missing: 0, failed: 0, error: '' });
   assert.equal(existsSync(sessionDir), false);
   assert.deepEqual(calls, [
     ['unarchiveSession', 'cold-session'],
     ['unpinSession', 'cold-session'],
     ['emit', 'api-session/removed', 'cold-session'],
   ]);
+});
+
+test('delete route resolves the session index once for a whole batch', async () => {
+  for (const id of ['batch-1', 'batch-2', 'batch-3']) seedSession(id);
+  const { route, listCalls } = createDeleteContext({
+    headers: [{ id: 'batch-1', cwd: dir }, { id: 'batch-2', cwd: dir }, { id: 'batch-3', cwd: dir }],
+  });
+  const result = await call(route, {
+    url: DELETE_URL,
+    body: { sessionIds: ['batch-1', 'batch-2', 'batch-3'] },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.deleted, 3);
+  assert.equal(listCalls(), 1);
 });
 
 test('delete route detaches a live session before removing its transcript', async () => {
@@ -331,7 +370,7 @@ test('removeSessions filters, dedupes and reports already-missing sessions as su
     emit() {},
   }, [' keep-me ', 'keep-me', '', 'ghost', null]);
 
-  assert.deepEqual(result, { ok: true, deleted: 1, failed: 0, error: '' });
+  assert.deepEqual(result, { ok: true, deleted: 1, missing: 1, failed: 0, error: '' });
   assert.equal(existsSync(sessionDir), false);
 });
 
@@ -554,4 +593,24 @@ test('workspace permission applies on agent creation for the matching workspace 
     false,
   );
   assert.deepEqual(applied, []);
+
+  // 从工作区子目录启动的会话同样命中最近的那条工作区路径。
+  assert.equal(
+    applyWorkspacePermission(ctx, {
+      source: 'startup',
+      agent: { session: { header: { ...session.header, cwd: 'C:\\Work\\Project\\pkg\\src' } } },
+    }, store),
+    true,
+  );
+  assert.deepEqual(applied, [['s1', 'workspace-write']]);
+});
+
+test('permission defaults refuse to overwrite a corrupt store file', () => {
+  const file = join(dir, 'permission-corrupt.json');
+  const store = createPermissionDefaultsStore(file);
+  store.set('w1', 'read-only');
+  writeFileSync(file, '{oops');
+
+  assert.throws(() => store.set('w2', 'workspace-write'));
+  assert.equal(readPermissionDefaults(file).w1, undefined);
 });

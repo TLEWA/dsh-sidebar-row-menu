@@ -1,6 +1,6 @@
 {
   "name": "dsh-sidebar-row-menu",
-  "version": "1.10.0",
+  "version": "1.11.0",
   "type": "module",
   "description": "Adds open-with and cleanup entries to the DSH sidebar context menus (interleaved on 0.2.2+, self-drawn workspace menu on 0.2.1), plus a conversation-body right-click menu that mirrors the session header toolbar with in-menu open-with and more-actions submenus.",
   "keywords": [
@@ -33,6 +33,7 @@
     "scripts/install.ps1",
     "scripts/marketplace-preflight.mjs",
     "cordis.patch.yml",
+    "AGENTS.md",
     "README.md",
     "README.en.md",
     "CHANGELOG.md",
@@ -59,12 +60,16 @@
     "dsh": ">=0.2.1-rc.5 <0.3.0-0"
   },
   "scripts": {
+    "build:client": "node scripts/build-client.mjs",
     "test": "node --test test/host.test.mjs test/manifest.test.mjs test/client.test.mjs",
+    "pretest": "npm run build:client",
     "test:local": "node --test --test-isolation=none test/host.test.mjs test/manifest.test.mjs test/client.test.mjs",
-    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js && node --check lib/host/permission-defaults.js && node --check lib/host/session-delete.js && node --check lib/host/workspace-delete.js",
+    "check": "npm run check:syntax && npm run check:client",
+    "check:syntax": "node --check lib/index.js && node --check lib/client.js && node --check lib/host/paths.js && node --check lib/host/security.js && node --check lib/host/launch.js && node --check lib/host/route.js && node --check lib/host/permission-defaults.js && node --check lib/host/session-delete.js && node --check lib/host/workspace-delete.js",
+    "check:client": "node scripts/build-client.mjs --check",
     "build": "npm pack",
     "marketplace:check": "node scripts/marketplace-preflight.mjs",
-    "prepack": "npm run check",
+    "prepack": "npm run build:client && npm run check",
     "prepublishOnly": "npm run check"
   },
   "publishConfig": {
@@ -77,5 +82,8 @@
   "homepage": "https://github.com/TLEWA/dsh-sidebar-row-menu#readme",
   "bugs": {
     "url": "https://github.com/TLEWA/dsh-sidebar-row-menu/issues"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
   }
 }

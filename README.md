@@ -313,10 +313,17 @@ cmd /c rmdir "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-sidebar-ro
 ## 开发
 
 ```powershell
-npm run test        # 常规：node --test，逐文件子进程
-npm run test:local  # 受限终端 / 沙箱：--test-isolation=none，同进程跑
-npm run build       # npm pack（prepack 会先跑 check），产出 .tgz
+npm install            # 只装 esbuild（唯一的 devDependency）
+npm run build:client   # src/client/** → lib/client.js（构建产物）
+npm run test           # 先构建再跑 node --test，逐文件子进程
+npm run test:local     # 受限终端 / 沙箱：--test-isolation=none，同进程跑
+npm run check          # 语法检查 + 产物与源码是否一致
+npm run build          # npm pack（prepack 会先构建 + check），产出 .tgz
 ```
+
+客户端源码在 `src/client/**`（ESM，多文件），由 esbuild 打包成单文件 `lib/client.js`；
+**不要手改 `lib/client.js`**，改完源码要重新构建。目录分层、命名、构建与发布约定见
+[AGENTS.md](AGENTS.md)。
 
 测试覆盖宿主侧纯函数（路径校验、`vscode://file` 编码、loopback 判定、路由状态码）
 和客户端模块（模块 id、导出、依赖白名单、监听器安装/卸载、slot 注册表），并用伪造的
@@ -335,7 +342,10 @@ lib/host/launch.js    VS Code / 资源管理器启动
 lib/host/route.js     /open、/session/delete 与 /workspace/delete 路由、HTTP 状态码
 lib/host/session-delete.js 会话日志目录的校验与删除（detach / rm / 复查）
 lib/host/workspace-delete.js 删除工作区及其所有会话；会话失败时保留工作区
-lib/client.js         客户端半边：fiber 解析、slot 注册、菜单挂载
+lib/client.js         客户端半边构建产物（由 src/client/** 打包，勿手改）
+src/client/           客户端源码：i18n、常量、样式、store、ui、features
+scripts/build-client.mjs  esbuild 打包脚本（--check 校验产物是否最新）
+AGENTS.md             仓库约定：分层、命名、构建与发布
 cordis.patch.yml      bundle patch：把插件插进 profile 插件树
 scripts/install.ps1   无 pnpm 的安装 / 卸载脚本
 test/*.test.mjs       node:test

@@ -1,5 +1,51 @@
 # Changelog
 
+## 1.11.0 — 2026-11-06
+
+### 中文摘要
+
+- **切换「新会话默认权限」失败时不再假装成功。** 网络或宿主出错时，菜单会回滚到原来
+  的勾选项并弹出失败提示；之前乐观更新会留在界面上、实际没写盘，也没有任何反馈。
+  同时修掉了「读设置」晚于「写设置」返回时用旧值覆盖新值的竞态。
+- **一次网络抖动不再让「打开方式 / 置顶应用」条目消失。** 应用列表加载失败时保留上次
+  成功的结果，而不是清空（旧行为会空白 10 秒）。
+- **批量删除会话更快、计数更准。** 一次批量（含删除工作区）只解析一次会话索引，不再
+  每个会话扫一遍全部会话（O(N²)），并改为 4 路并发执行；若目标会话已全部不存在，
+  提示改为「会话已不存在，无需删除」，不再报「已删除 0 个」。
+- **Windows 上从 `.cmd` / `.bat` 启动编辑器时路径不再被拆词。** 含空格或 `& ^ ( )` 的
+  目录不会再传错，也堵掉了命令注入面。
+- **权限设置文件更安全。** 写入加文件锁（避免并发读-改-写丢更新），读到损坏的 JSON 时
+  报错而不是整表覆盖；从工作区子目录启动的会话也能命中该工作区的默认权限。
+- **内部重构：客户端拆模块 + 打包。** `lib/client.js` 改为由 `src/client/**` 经 esbuild
+  打包的产物，9 套重复的 localStorage store、5 处子菜单关闭逻辑、菜单挂载外壳都收敛
+  成共用实现；仓库约定见 `AGENTS.md`。行为与 UI 不变。
+
+### Changed
+
+- **A failed "default permission for new sessions" change no longer pretends to
+  succeed.** On a network or host error the menu rolls back to the previous checkmark
+  and shows a failure toast; the optimistic update used to stay on screen even though
+  nothing was persisted, with no feedback at all. A read that resolves after a write
+  can no longer overwrite the newer value either.
+- **One network hiccup no longer empties the "Open with / pinned apps" entries.** The
+  app list keeps its last successful result on failure instead of clearing for 10
+  seconds.
+- **Batch session deletion is faster and counts correctly.** A batch (including
+  deleting a whole workspace) resolves the session index once instead of listing every
+  session per id (O(N²)) and runs with 4-way concurrency; when all targets were already
+  gone the toast says "the sessions were already gone" instead of "deleted 0".
+- **Windows `.cmd` / `.bat` editor launchers no longer split paths.** Directories with
+  spaces or `& ^ ( )` are quoted correctly, closing the command-injection surface.
+- **Safer permission store.** Writes take a file lock (no lost updates on concurrent
+  read-modify-write) and a corrupt JSON file now fails loudly instead of being
+  overwritten; sessions started from a workspace subdirectory resolve that workspace's
+  default permission too.
+- **Internal refactor: the client is now split into modules and bundled.**
+  `lib/client.js` is a build artifact of `src/client/**` via esbuild; nine duplicated
+  localStorage stores, five copies of submenu dismissal and the menu-mount shell now
+  share one implementation. Conventions live in `AGENTS.md`; behaviour and UI are
+  unchanged.
+
 ## 1.10.0 — 2026-11-06
 
 ### 中文摘要

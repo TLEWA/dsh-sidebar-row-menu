@@ -366,10 +366,18 @@ pnpm install (npm or GitHub)" transition.
 ## Development
 
 ```powershell
-npm run test        # normal: node --test, one child process per file
-npm run test:local  # restricted terminals / sandboxes: --test-isolation=none
-npm run build       # npm pack (prepack runs check first), writes the .tgz
+npm install            # installs esbuild, the only devDependency
+npm run build:client   # src/client/** → lib/client.js (build artifact)
+npm run test           # builds first, then node --test, one process per file
+npm run test:local     # restricted terminals / sandboxes: --test-isolation=none
+npm run check          # syntax check + artifact freshness
+npm run build          # npm pack (prepack builds and checks first), writes the .tgz
 ```
+
+The client half lives in `src/client/**` (ESM, multiple files) and is bundled into the
+single file `lib/client.js` by esbuild. **Do not edit `lib/client.js` by hand** — change
+the sources and rebuild. Layout rules, naming and the release checklist are in
+[AGENTS.md](AGENTS.md).
 
 The suite covers host pure functions (path validation, `vscode://file` encoding,
 loopback checks, route status codes) and the client module (module id, exports,
@@ -389,7 +397,10 @@ lib/host/launch.js    VS Code / Explorer launching
 lib/host/route.js     /open, /session/delete and /workspace/delete routes, HTTP status codes
 lib/host/session-delete.js transcript verification and deletion (detach / rm / re-check)
 lib/host/workspace-delete.js workspace + all sessions deletion, workspace kept on failure
-lib/client.js         browser half: fiber lookup, slot registration, menu mount
+lib/client.js         browser half build artifact (bundled from src/client/**, do not edit)
+src/client/           browser sources: i18n, constants, styles, stores, ui, features
+scripts/build-client.mjs  esbuild bundler (--check verifies the artifact is fresh)
+AGENTS.md             repository conventions: layering, naming, build and release
 cordis.patch.yml      bundle patch inserting the plugin into the profile tree
 scripts/install.ps1   pnpm-free install / uninstall
 test/*.test.mjs       node:test

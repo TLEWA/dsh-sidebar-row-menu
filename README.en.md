@@ -649,19 +649,24 @@ If a DSH upgrade changes those row components or the menu positioning:
   affected menu silently falls back to native behaviour and still does not affect
   messages, the composer or the toolbar's own menus.
 
-## More DSH plugins by this author
+## Other DSH projects I work on
 
-Right-click menus are only one corner of DSH. These plugins are maintained by the same author — take what fits:
+Right-click menus are only one corner of DSH. These are the other DSH projects I work on — take what fits.
+
+**Maintained by me**
 
 - **[dsh-sidebar-organizer](https://github.com/TLEWA/dsh-sidebar-organizer)** — a layout organizer for seven regions: sidebar, sidebar footer, conversation tabs, composer, session header, right panel, and settings navigation all support long-press drag to reorder, and panels can be tucked into "More".
-- **[dsh-market](https://github.com/TLEWA/dsh-market)** — a visual plugin market inside the app: browse, search, and one-click install community plugins.
-- **[dsh-unlag](https://github.com/TLEWA/dsh-unlag)** — a refresh button for the desktop app: swap plugin code without restarting, rebuild a sluggish UI in place, and running turns keep going.
-- **[dsh-cost-meter](https://github.com/TLEWA/dsh-cost-meter)** — session cost tracking: per-conversation and daily cost, history, multi-vendor multi-model pricing and Coding Plan quotas, with a bilingual UI.
 - **[dsh-better-choice](https://github.com/TLEWA/dsh-better-choice)** — an `ask_user_question` enhancement: right-click an option to add a note, or ask the model a side question with the same context before choosing.
 - **[dsh-if](https://github.com/TLEWA/dsh-if)** — the `/if` command: let the model judge a condition from prior context, then send the instruction below it as a user message only when it holds.
 - **[dsh-utf8-output](https://github.com/TLEWA/dsh-utf8-output)** — fixes GBK/CP936/CP932 mojibake from DSH subprocess output on Windows.
 - **[dsh-opencode-go-router](https://github.com/TLEWA/dsh-opencode-go-router)** — rotates OpenCode Go routing after a context fold or a system-prompt rewrite, so less of the prompt cache is lost.
-- **[billion-context](https://github.com/TLEWA/billion-context)** — context compression: a 100K window is enough for month-long sessions, with about 5× fewer tokens for the same content.
+
+**Contributed to** (linked to the upstream repository)
+
+- **[dsh-market](https://github.com/dsh-market/dsh-market)** — a visual plugin market inside the app: browse, search, and one-click install community plugins.
+- **[dsh-cost-meter](https://github.com/Han-1413141/dsh-cost-meter)** — session cost tracking: per-conversation and daily cost, history, multi-vendor multi-model pricing and Coding Plan quotas, with a bilingual UI.
+- **[dsh-unlag](https://github.com/regrevia/dsh-unlag)** — a refresh button for the desktop app: swap plugin code without restarting, rebuild a sluggish UI in place, and running turns keep going.
+- **[billion-context](https://github.com/ranxianglei/billion-context)** — context compression: a 100K window is enough for month-long sessions, with about 5× fewer tokens for the same content.
 
 ## License and notices
 

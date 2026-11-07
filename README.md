@@ -558,22 +558,13 @@ DSH 升级若改动行组件或菜单定位实现：
 
 ## 我的其他 DSH 项目
 
-侧栏右键只是 DSH 的一小块。下面这些项目我也在参与，按需取用。
-
-**由我维护**
+侧栏右键只是 DSH 的一小块。下面这些插件都由我维护，按需取用。
 
 - **[dsh-sidebar-organizer](https://github.com/TLEWA/dsh-sidebar-organizer)** —— 七区域布局整理器：侧栏、侧栏底部、对话标签、输入框、会话头部、右侧栏、设置导航都能长按拖拽排序，面板可以收进「更多」再拖回来。
 - **[dsh-better-choice](https://github.com/TLEWA/dsh-better-choice)** —— `ask_user_question` 增强：右键选项补备注，选之前先拿同一份上下文旁问模型一句。
 - **[dsh-if](https://github.com/TLEWA/dsh-if)** —— `/if` 命令：让模型结合上文判断条件，成立才把下面的指令作为用户消息发出。
 - **[dsh-utf8-output](https://github.com/TLEWA/dsh-utf8-output)** —— 修复 Windows 下 DSH 子进程 GBK/CP936/CP932 输出乱码。
 - **[dsh-opencode-go-router](https://github.com/TLEWA/dsh-opencode-go-router)** —— 上下文折叠或系统提示被重写后轮换 OpenCode Go 路由，少丢一点提示缓存。
-
-**我参与贡献**（链接指向上游主仓库）
-
-- **[dsh-market](https://github.com/dsh-market/dsh-market)** —— 应用内的可视化插件市场：浏览、搜索、一键安装社区插件。
-- **[dsh-cost-meter](https://github.com/Han-1413141/dsh-cost-meter)** —— 会话费用统计：本会话与当日成本、历史记录、多厂商多模型价格、Coding Plan 额度，界面中英双语。
-- **[dsh-unlag](https://github.com/regrevia/dsh-unlag)** —— 桌面端自己的刷新按钮：换插件不用重启，界面开久了卡了也能一键重建，进行中的会话不受影响。
-- **[billion-context](https://github.com/ranxianglei/billion-context)** —— 上下文压缩：100K 窗口也够跑月级长会话，同样内容大约省 5 倍 token。
 
 ## 许可与声明
 

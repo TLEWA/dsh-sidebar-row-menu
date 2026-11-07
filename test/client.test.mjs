@@ -38,7 +38,10 @@ function loadClient(stored = {}, options = {}) {
       );
       if (index >= 0) listeners.splice(index, 1);
     },
-    setTimeout: () => 0,
+    setTimeout: (fn) => {
+      if (options.runTimers === true && typeof fn === 'function') fn();
+      return 0;
+    },
   };
   const documentListeners = [];
   const document = {
@@ -1235,7 +1238,8 @@ function makeToolbarButton(label, left, options = {}) {
     clicks: 0,
     getAttribute(name) {
       if (name === 'aria-label') return label;
-      return null;
+      const extra = options.attrs ?? {};
+      return Object.hasOwn(extra, name) ? extra[name] : null;
     },
     matches(selector) {
       return String(selector).startsWith('button');
@@ -1578,3 +1582,114 @@ test('the More row renders its own submenu from the host menu items', () => {
   );
   assert.equal(more.clicks, 0, 'the host More button should not be clicked');
 });
+
+/** 把一个带 organizer 收纳标记的头部按钮塞进 fake header。 */
+function makeTuckedButton(label, key, left) {
+  const button = makeToolbarButton(label, left, {
+    attrs: { 'data-dso-scope': 'header', 'data-dso-hidden': '1', 'data-dso-key': key },
+  });
+  button.group = 'utilities';
+  return button;
+}
+
+/** 走一遍正文空白处右键，取「更多操作」那一行。 */
+function openBlankMenuMoreRow(harness, roots) {
+  const listener = harness.listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+  const row = toolbarRows(roots).find((entry) => entry.props.children === '更多操作');
+  assert.ok(row, 'More row should be present');
+  assert.equal(row.type.name, 'BlankMoreRows');
+  return row;
+}
+
+function makeMoreButton(items) {
+  const more = makeToolbarButton('更多操作', 502, { className: 'K0RNnq_moreButton' });
+  more.group = 'utilities';
+  more['__reactFiber$test'] = { memoizedProps: { items, onSelect: () => {} }, return: null };
+  return more;
+}
+
+test('the More submenu restores header rows tucked away by dsh-sidebar-organizer', () => {
+  const harness = loadClient({
+    'dsh.sidebar-organizer.layout.v1': JSON.stringify({
+      scopes: { header: { hidden: ['host:ip-防护'] } },
+    }),
+  });
+  const { registration, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const tucked = makeTuckedButton('IP 防护：0 个黑洞', 'host:ip-防护', 700);
+  const more = makeMoreButton([
+    { id: 'copy', label: '复制会话为 Markdown' },
+    { id: 'download', label: '下载 Session 日志' },
+  ]);
+  installFakeHeader(document, [tucked, more]);
+
+  exported.apply(makeCtx());
+  const row = openBlankMenuMoreRow(harness, roots);
+  assert.equal(
+    row.props.controller.items.map((item) => item.label).join(','),
+    'IP 防护：0 个黑洞,复制会话为 Markdown,下载 Session 日志',
+  );
+});
+
+test('tucked header rows follow the organizer layout order and ignore untucked rows', () => {
+  const harness = loadClient({
+    'dsh.sidebar-organizer.layout.v1': JSON.stringify({
+      scopes: { header: { hidden: ['host:beta', 'IP 防护：0 个黑洞'] } },
+    }),
+  });
+  const { registration, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const ip = makeTuckedButton('IP 防护：0 个黑洞', 'host:ip-防护', 700);
+  const beta = makeTuckedButton('Beta 面板', 'host:beta', 600);
+  const visible = makeToolbarButton('查找', 646, {
+    attrs: { 'data-dso-scope': 'header', 'data-dso-key': 'host:find' },
+  });
+  visible.group = 'utilities';
+  installFakeHeader(document, [ip, beta, visible, makeMoreButton([{ id: 'feedback', label: '反馈' }])]);
+
+  exported.apply(makeCtx());
+  const row = openBlankMenuMoreRow(harness, roots);
+  assert.equal(
+    row.props.controller.items.map((item) => item.label).join(','),
+    'Beta 面板,IP 防护：0 个黑洞,反馈',
+  );
+});
+
+test('clicking a tucked header row clicks the original hidden button', () => {
+  const harness = loadClient({
+    'dsh.sidebar-organizer.layout.v1': JSON.stringify({
+      scopes: { header: { hidden: ['host:ip-防护'] } },
+    }),
+  }, { runTimers: true });
+  const { registration, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const tucked = makeTuckedButton('IP 防护：0 个黑洞', 'host:ip-防护', 700);
+  const selected = [];
+  const more = makeToolbarButton('更多操作', 502, { className: 'K0RNnq_moreButton' });
+  more.group = 'utilities';
+  more['__reactFiber$test'] = {
+    memoizedProps: { items: [{ id: 'copy', label: '复制会话为 Markdown' }], onSelect: (id) => selected.push(id) },
+    return: null,
+  };
+  installFakeHeader(document, [tucked, more]);
+
+  exported.apply(makeCtx());
+  const row = openBlankMenuMoreRow(harness, roots);
+  const rows = row.props.controller.items;
+  assert.equal(rows[0].button, tucked);
+  row.props.controller.onSelect(rows[0].id);
+  assert.equal(tucked.clicks, 1, 'the hidden header button should be clicked');
+  row.props.controller.onSelect('copy');
+  assert.deepEqual(selected, ['copy'], 'host items still go through the host onSelect');
+});
+

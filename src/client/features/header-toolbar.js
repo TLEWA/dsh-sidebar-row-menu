@@ -1,5 +1,5 @@
 import { appIcon, appLabel } from '../apps-catalog.js';
-import { MENU_ATTR, MORE_LABEL_RE, ORGANIZER_MENU_ORDER_KEY } from '../constants.js';
+import { MENU_ATTR, MORE_LABEL_RE, ORGANIZER_LAYOUT_KEY, ORGANIZER_MENU_ORDER_KEY } from '../constants.js';
 import { fiberOf } from '../dom.js';
 import { localeOf } from './workspace-menu.js';
 import { sessionCwd } from '../host-api.js';
@@ -389,6 +389,123 @@ function orderMoreItems(entries) {
 }
 
 /**
+ * dsh-sidebar-organizer 记下的「收进更多操作」的行 id（按收纳顺序）。
+ * 读不到（没装、没收纳过、数据坏了）就是空数组，调用方按 DOM 顺序兜底。
+ */
+function organizerHiddenOrder() {
+  try {
+    const raw = window.localStorage.getItem(ORGANIZER_LAYOUT_KEY);
+    if (raw === null) return [];
+    const parsed = JSON.parse(raw);
+    const hidden = parsed?.scopes?.header?.hidden;
+    return Array.isArray(hidden) ? hidden.filter((value) => typeof value === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 行 id 的指纹，和 dsh-sidebar-organizer 0.10 的 id 推导保持一致：
+ * 去掉 host: / text: 前缀，切掉最后一个冒号后的状态段（「IP 防护：0 个黑洞」→「IP 防护」），
+ * 数字归一成 n，再压成 slug。这样旧标签 id 与新指纹 id 能认成同一行。
+ */
+function organizerFingerprint(value) {
+  let text = String(value ?? '').trim();
+  if (text.startsWith('host:')) text = text.slice(5);
+  else if (text.startsWith('text:')) text = text.slice(5);
+  const cut = Math.max(text.lastIndexOf(':'), text.lastIndexOf('：'));
+  if (cut > 0 && text.slice(cut + 1).trim() !== '') text = text.slice(0, cut);
+  return text
+    .replace(/\d+/g, 'n')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * dsh-sidebar-organizer 收进原生「更多操作」的头部按钮。
+ * 这些行是它直接往宿主弹层里插的 DOM，不在宿主 Menu 的 items 里；
+ * 自己的二级菜单只能从工具条上被标了 data-dso-hidden 的原按钮反推出来，
+ * 点击时再点一次原按钮（和它自己的收纳行行为一致）。
+ */
+function organizerTuckedHeaderItems() {
+  const root = activeSessionHeader();
+  if (!root || typeof root.querySelector !== 'function') return [];
+  const order = organizerHiddenOrder();
+  const rank = new Map();
+  for (const id of order) {
+    const fingerprint = organizerFingerprint(id);
+    if (fingerprint !== '' && !rank.has(fingerprint)) rank.set(fingerprint, rank.size);
+  }
+  const items = [];
+  const seen = new Set();
+  for (const slot of HEADER_SLOT_SELECTORS) {
+    const container = root.querySelector(slot.selector);
+    if (!container) continue;
+    for (const unit of Array.from(container.children ?? [])) {
+      const candidates = [];
+      if (typeof unit?.matches === 'function' && unit.matches(BLANK_INTERACTIVE)) candidates.push(unit);
+      if (typeof unit?.querySelectorAll === 'function') {
+        for (const node of unit.querySelectorAll(BLANK_INTERACTIVE)) {
+          if (node !== unit) candidates.push(node);
+        }
+      }
+      for (const button of candidates) {
+        if (seen.has(button)) continue;
+        if (typeof button?.getAttribute !== 'function') continue;
+        if (button.getAttribute('data-dso-scope') !== 'header') continue;
+        if (button.getAttribute('data-dso-hidden') !== '1') continue;
+        if (button.disabled === true || button.getAttribute('aria-disabled') === 'true') continue;
+        const label = headerButtonLabel(button);
+        if (label === '') continue;
+        seen.add(button);
+        const key = button.getAttribute('data-dso-key') ?? '';
+        const fingerprints = [organizerFingerprint(key), organizerFingerprint(label)].filter((value) => value !== '');
+        const known = fingerprints.map((fingerprint) => rank.get(fingerprint)).filter((value) => value !== undefined);
+        items.push({
+          id: `organizer:${key === '' ? label : key}`,
+          label,
+          icon: headerButtonIcon(button),
+          button,
+          rank: known.length === 0 ? Number.MAX_SAFE_INTEGER : Math.min(...known),
+          order: items.length,
+        });
+      }
+    }
+  }
+  return items
+    .sort((a, b) => a.rank - b.rank || a.order - b.order)
+    .map(({ id, label, icon, button }) => ({ id, label, icon, button }));
+}
+
+/** 「更多操作」子菜单的成品行：organizer 的收纳行在前（它在宿主弹层里也置顶），宿主 items 按 organizer 记录的行序。 */
+function moreSubmenuItems(menu) {
+  return [...organizerTuckedHeaderItems(), ...orderMoreItems(menu.items)];
+}
+
+/**
+ * 子菜单条目的执行器：宿主 items 交给宿主的 onSelect；
+ * 收纳行不在宿主 items 里，动作就是等菜单卸载后再点一次被 organizer 藏起来的原按钮
+ * （和 organizer 自己的收纳行行为一致，弹出层才能锚定到原按钮）。
+ */
+function moreSelectHandler(menu, entries) {
+  return (id) => {
+    const entry = entries.find((item) => item.id === id);
+    if (!entry || typeof entry.button?.click !== 'function') {
+      menu.onSelect(id);
+      return;
+    }
+    window.setTimeout(() => {
+      try {
+        entry.button.click();
+      } catch (error) {
+        console.warn('[dsh-sidebar-row-menu] tucked header action failed:', error);
+      }
+    }, 0);
+  };
+}
+
+/**
  * 空白菜单里的「更多操作」：直接读宿主 Menu 的 items / onSelect，
  * 在自己的子菜单里复刻那几项（复制 / 下载 / 反馈……），不再点开右上角的「…」。
  */
@@ -396,7 +513,7 @@ function BlankMoreRows({ label, icon, controller, separatorBefore, onClose, chil
   const [open, setOpen] = useState(false);
   const hostRef = useRef(null);
   const { closeSoon, openNow } = useHoverSubmenu(setOpen);
-  const entries = orderMoreItems(controller.items);
+  const entries = controller.items;
 
   useSubmenuDismiss(open, setOpen, hostRef);
 
@@ -509,13 +626,14 @@ function HeaderToolbarMenu({ x, y, items, t, sessionId, onClose }) {
       return;
     }
     if (item.more && item.menu !== null && item.menu !== undefined) {
+      // 宿主弹层的行序由 dsh-sidebar-organizer 用 CSS order 控制，收纳行进的是它自己
+      // 往弹层里插的 DOM（不在 items 里）；子菜单是自绘的，只能按同一份记录补行补序。
+      const moreItems = moreSubmenuItems(item.menu);
       rows.push(jsx(BlankMoreRows, {
         key: `${index}:more`,
         label: item.label,
         icon: item.icon,
-        // 宿主弹层的行序由 dsh-sidebar-organizer 用 CSS order 控制，这里的
-        // 子菜单是自绘的，必须按它保存的顺序重排才能保持联动。
-        controller: { items: orderMoreItems(item.menu.items), onSelect: item.menu.onSelect },
+        controller: { items: moreItems, onSelect: moreSelectHandler(item.menu, moreItems) },
         separatorBefore: takeSeparator('more'),
         onClose,
         children: item.label,
@@ -564,4 +682,4 @@ function openHeaderToolbarMenu(items, x, y, sessionId = '') {
   }));
 }
 
-export { BLANK_BLOCKERS, BLANK_INTERACTIVE, BLANK_MESSAGE_CONTROLS, BlankMoreRows, BlankOpenWithRows, HEADER_SLOT_SELECTORS, HeaderToolbarMenu, activeSessionHeader, collectHeaderToolbarItems, findHeaderMenuController, hasTextSelection, headerButtonIcon, headerButtonLabel, headerIconNode, isBlankConversationTarget, isMoreTrigger, isOnScreen, isOpenWithSplit, openHeaderToolbarMenu, orderMoreItems, organizerMenuOrder, selectedSessionId };
+export { BLANK_BLOCKERS, BLANK_INTERACTIVE, BLANK_MESSAGE_CONTROLS, BlankMoreRows, BlankOpenWithRows, HEADER_SLOT_SELECTORS, HeaderToolbarMenu, activeSessionHeader, collectHeaderToolbarItems, findHeaderMenuController, hasTextSelection, headerButtonIcon, headerButtonLabel, headerIconNode, isBlankConversationTarget, isMoreTrigger, isOnScreen, isOpenWithSplit, moreSelectHandler, moreSubmenuItems, openHeaderToolbarMenu, orderMoreItems, organizerMenuOrder, organizerTuckedHeaderItems, selectedSessionId };

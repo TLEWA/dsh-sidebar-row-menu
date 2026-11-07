@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.11.1 — 2026-11-08
+
+### 中文摘要
+
+- **修好与新版 dsh-sidebar-organizer 的联动：被它收进「更多操作」的头部按钮，现在也出现在
+  本插件自绘的「更多操作」二级菜单里。** 新版 organizer 的收纳行是直接插进宿主弹层的 DOM，
+  不在宿主 Menu 的 `items` 里，所以之前只读 `items` 的子菜单会少掉这些行（例如
+  「IP 防护」）。现在按 organizer 记在 `dsh.sidebar-organizer.layout.v1` 的收纳顺序补行，
+  排在宿主条目之前（与它在原生弹层里的位置一致），点击时再点一次被收起来的原按钮。
+
+### Changed
+
+- **Restored the dsh-sidebar-organizer link: header buttons it tucks into the native
+  "More actions" popup now show up in this plugin's own "More actions" submenu.** The
+  organizer injects those rows straight into the host popup's DOM, so they never appear
+  in the host Menu's `items` and a submenu built from `items` alone (e.g. "IP guard")
+  lost them. They are now re-derived from the marked header buttons, ordered by
+  `dsh.sidebar-organizer.layout.v1`, placed before the host items (matching their position
+  in the native popup), and clicking one clicks the tucked original button.
+
 ## 1.11.0 — 2026-11-06
 
 ### 中文摘要

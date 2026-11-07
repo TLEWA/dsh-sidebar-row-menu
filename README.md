@@ -570,8 +570,6 @@ DSH 升级若改动行组件或菜单定位实现：
 - **[dsh-opencode-go-router](https://github.com/TLEWA/dsh-opencode-go-router)** —— 上下文折叠或系统提示被重写后轮换 OpenCode Go 路由，少丢一点提示缓存。
 - **[billion-context](https://github.com/TLEWA/billion-context)** —— 上下文压缩：100K 窗口也够跑月级长会话，同样内容大约省 5 倍 token。
 
-也维护了一份社区插件清单 **[awesome-dsh-plugin](https://github.com/TLEWA/awesome-dsh-plugin)**，想找更多插件可以从那里逛起。
-
 ## 许可与声明
 
 - 代码：[MIT](LICENSE)。

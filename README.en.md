@@ -663,8 +663,6 @@ Right-click menus are only one corner of DSH. These plugins are maintained by th
 - **[dsh-opencode-go-router](https://github.com/TLEWA/dsh-opencode-go-router)** — rotates OpenCode Go routing after a context fold or a system-prompt rewrite, so less of the prompt cache is lost.
 - **[billion-context](https://github.com/TLEWA/billion-context)** — context compression: a 100K window is enough for month-long sessions, with about 5× fewer tokens for the same content.
 
-There is also a curated community list, **[awesome-dsh-plugin](https://github.com/TLEWA/awesome-dsh-plugin)**, if you want to browse further.
-
 ## License and notices
 
 - Code: [MIT](LICENSE).

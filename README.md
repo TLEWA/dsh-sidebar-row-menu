@@ -556,6 +556,22 @@ DSH 升级若改动行组件或菜单定位实现：
   （「更多操作」二级菜单从这里读 items / onSelect）；宿主若改掉这些扩展点或 fiber
   结构，对应菜单会静默退回原生行为，不会影响消息、输入框和工具条自己的右键。
 
+## 我的其他 DSH 插件
+
+侧栏右键只是 DSH 的一小块。同作者还维护了这些插件，按需取用：
+
+- **[dsh-sidebar-organizer](https://github.com/TLEWA/dsh-sidebar-organizer)** —— 七区域布局整理器：侧栏、侧栏底部、对话标签、输入框、会话头部、右侧栏、设置导航都能长按拖拽排序，面板可以收进「更多」再拖回来。
+- **[dsh-market](https://github.com/TLEWA/dsh-market)** —— 应用内的可视化插件市场：浏览、搜索、一键安装社区插件。
+- **[dsh-unlag](https://github.com/TLEWA/dsh-unlag)** —— 桌面端自己的刷新按钮：换插件不用重启，界面开久了卡了也能一键重建，进行中的会话不受影响。
+- **[dsh-cost-meter](https://github.com/TLEWA/dsh-cost-meter)** —— 会话费用统计：本会话与当日成本、历史记录、多厂商多模型价格、Coding Plan 额度，界面中英双语。
+- **[dsh-better-choice](https://github.com/TLEWA/dsh-better-choice)** —— `ask_user_question` 增强：右键选项补备注，选之前先拿同一份上下文旁问模型一句。
+- **[dsh-if](https://github.com/TLEWA/dsh-if)** —— `/if` 命令：让模型结合上文判断条件，成立才把下面的指令作为用户消息发出。
+- **[dsh-utf8-output](https://github.com/TLEWA/dsh-utf8-output)** —— 修复 Windows 下 DSH 子进程 GBK/CP936/CP932 输出乱码。
+- **[dsh-opencode-go-router](https://github.com/TLEWA/dsh-opencode-go-router)** —— 上下文折叠或系统提示被重写后轮换 OpenCode Go 路由，少丢一点提示缓存。
+- **[billion-context](https://github.com/TLEWA/billion-context)** —— 上下文压缩：100K 窗口也够跑月级长会话，同样内容大约省 5 倍 token。
+
+也维护了一份社区插件清单 **[awesome-dsh-plugin](https://github.com/TLEWA/awesome-dsh-plugin)**，想找更多插件可以从那里逛起。
+
 ## 许可与声明
 
 - 代码：[MIT](LICENSE)。

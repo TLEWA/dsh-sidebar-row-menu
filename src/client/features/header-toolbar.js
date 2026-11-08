@@ -20,12 +20,11 @@ const HEADER_SLOT_SELECTORS = [
   { section: 'utilities', selector: '[data-slot="conversation.session.header.utilities"]' },
   { section: 'corner', selector: '[data-slot="conversation.session.header.corner"]' },
 ];
-/** 这些区域里的右键不归空白菜单管：工具条、输入框与工具卡片本身。 */
+/** 这些区域里的右键不归空白菜单管：会话头工具条与输入框。 */
 const BLANK_BLOCKERS = [
   '[data-slot="conversation.header"]',
   '[data-slot="conversation.session.header"]',
   '[data-slot="conversation.composer"]',
-  '[data-slot="tool.call.toolview"]',
 ].join(',');
 /** 消息正文里仍然让位的控件：输入类与链接用浏览器/宿主的原生菜单。 */
 const BLANK_MESSAGE_CONTROL_SELECTORS = [
@@ -224,9 +223,9 @@ function hasTextSelection() {
 }
 
 /**
- * 右键是否落在会话正文里（工具条、输入框、工具卡片之外，且没有选中文字）。
- * 消息正文（思考过程、回复、工具摘要……）放宽到只避开输入控件与链接：
- * 思考标题本身是 role=button，但右键它也应该出菜单。
+ * 右键是否落在会话正文里（会话头工具条与输入框之外，且没有选中文字）。
+ * 消息正文（思考过程、回复、工具摘要……）与工具卡片（代码框、工具调用摘要）
+ * 都放宽到只避开输入控件与链接：标题本身是 role=button，但右键它也应该出菜单。
  */
 function isBlankConversationTarget(target) {
   if (target === null || target === undefined) return false;
@@ -236,6 +235,11 @@ function isBlankConversationTarget(target) {
   if (start.closest('[data-slot="conversation.session"]') === null) return false;
   if (start.closest(BLANK_BLOCKERS) !== null) return false;
   if (hasTextSelection()) return false;
+  // 工具卡片（代码框 / 工具调用摘要）与消息正文同等待遇：标题是 role=button 也要出菜单，
+  // 只有输入控件和链接让位给原生菜单。卡片可能不在 chat.node 里（例如独立面板），所以单列一条。
+  if (start.closest('[data-slot="tool.call.toolview"]') !== null) {
+    return start.closest(BLANK_MESSAGE_CONTROLS) === null;
+  }
   if (start.closest('[data-slot="conversation.chat.node"]') !== null) {
     return start.closest(BLANK_MESSAGE_CONTROLS) === null;
   }

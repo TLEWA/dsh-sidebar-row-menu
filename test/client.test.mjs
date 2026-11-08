@@ -1206,24 +1206,25 @@ test('the row action button hides the right-click entries for its own menu', () 
 /* --------------------------------------- blank conversation context menu */
 
 /** A fake conversation-body target for the blank-space handler. */
-function makeConversationTarget({ blocked = false, message = false, button = false } = {}) {
+function makeConversationTarget({ blocked = false, message = false, button = false, tool = false, control = false } = {}) {
   const session = {};
   const blocker = blocked ? {} : null;
   const node = message ? {} : null;
+  const toolView = tool ? {} : null;
   const buttonEl = button ? {} : null;
+  const controlEl = control ? {} : null;
   return {
     nodeType: 1,
     closest(selector) {
       const text = String(selector);
       if (text.includes('data-row-key')) return null;
       if (text === '[data-slot="conversation.session"]') return session;
+      // 输入控件与链接的合并选择器，只有 control=true 时才命中。
+      if (text.includes('a[href]')) return controlEl;
       if (text.includes('conversation.chat.node')) return node;
+      if (text.includes('tool.call.toolview')) return toolView;
       if (text.includes('role="button"')) return buttonEl;
-      if (text.includes('conversation.composer')
-        || text.includes('conversation.header')
-        || text.includes('tool.call.toolview')) {
-        return blocker;
-      }
+      if (text.includes('conversation.composer') || text.includes('conversation.header')) return blocker;
       return null;
     },
   };
@@ -1466,6 +1467,34 @@ test('right-click on a thinking header inside a message still opens the menu', (
   const event = fireContextMenu(listener, makeConversationTarget({ message: true, button: true }));
   assert.equal(event.defaultPrevented, true);
   assert.equal(roots.length, 1);
+});
+
+test('right-click inside a tool card opens the blank menu', () => {
+  const harness = loadClient();
+  const { registration, listeners, window, document } = harness;
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+
+  exported.apply(makeCtx());
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+
+  // 代码框 / 工具调用摘要的标题本身就是 role=button，右键它也要出菜单。
+  const header = fireContextMenu(listener, makeConversationTarget({ tool: true, button: true }));
+  assert.equal(header.defaultPrevented, true);
+  assert.equal(roots.length, 1);
+
+  // 卡片正文（没有 role=button，也不在 chat.node 里）同样接管。
+  const body = fireContextMenu(listener, makeConversationTarget({ tool: true }));
+  assert.equal(body.defaultPrevented, true);
+
+  // 卡片里的链接仍然让位给原生菜单。
+  const link = fireContextMenu(listener, makeConversationTarget({ tool: true, control: true }));
+  assert.equal(link.defaultPrevented, false);
 });
 
 test('header actions slot entries stay hidden until enabled', () => {

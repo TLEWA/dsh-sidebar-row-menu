@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.11.2 — 2026-11-08
+
+### 中文摘要
+
+- **代码框 / 工具调用卡片上右键不再没反应。** 之前整张工具卡片被当成「不归空白右键菜单管」的区域，
+  右键直接落到浏览器原生菜单；现在卡片标题（即使是 role=button 的代码框标题）和展开后的正文
+  都会弹出插件菜单，只有卡片里的链接与输入控件继续让位给原生菜单。
+
+### Changed
+
+- **Right-click on code blocks and tool-call cards works again.** The whole tool card used to be
+  treated as "not ours" by the blank-space right-click handler, so the native browser menu showed
+  instead of the plugin menu. Card headers (even when they are `role=button`) and expanded bodies
+  now open the plugin menu; links and form controls inside cards still fall back to the native menu.
+
 ## 1.11.1 — 2026-11-08
 
 ### 中文摘要

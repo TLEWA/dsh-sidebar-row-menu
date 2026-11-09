@@ -69,6 +69,31 @@ npm pack                # prepack 会构建 + check，产出 .tgz
 改完客户端代码务必 `npm run build:client && npm test`；只改 `lib/host/**` 时也跑一遍
 `npm test`。提交前 `git status` 应包含 `lib/client.js`（产物）与源码改动。
 
+## CI 与 PR
+
+本仓库已接入中心仓 `TLEWA/dsh-plugin-ci`。通用规则以中心仓的
+[PROCESS.md](https://github.com/TLEWA/dsh-plugin-ci/blob/v1/PROCESS.md) 与
+[docs/gates.md](https://github.com/TLEWA/dsh-plugin-ci/blob/v1/docs/gates.md) 为准；
+这里只列本仓库最容易踩的线。
+
+1. 从最新 `main` 开 `feat/`、`fix/`、`docs/`、`chore/` 或 `refactor/` 分支；
+   不要直接改 `main`。
+2. 同一个 PR 提交代码、测试、双语 README/CHANGELOG。改 `src/client/**` 必须同时提交
+   `lib/client.js`，且 `npm run check` 必须通过。
+3. push 前本地跑 gate；以 gate 的 `fix:` 修根因，不要加 `.only`/`.skip`/抑制注释，
+   也不要复制 gate 脚本：
+
+   ```bash
+   npx --yes --package=github:TLEWA/dsh-plugin-ci#v1 dsh-ci-gate
+   npm test
+   ```
+
+4. 按 `.github/PULL_REQUEST_TEMPLATE.md` 勾选；等 `ci / ci-ok` 全绿后由维护者合并。
+5. 修改 `.github/workflows/**`、`.github/PULL_REQUEST_TEMPLATE.md`、`AGENTS.md` 或
+   `ci.config.json` 属于 CI 变更，PR 必须加 `ci-change` 标签；`human-approved` 只能由人加，
+   模型不得自行添加。
+6. 模型不得执行 `npm publish`，不得自行改版本号。发布只走 `release.yml` 的 tag 流程。
+
 ## 发布
 
 1. 升 `package.json` 版本，CHANGELOG 按现有双语格式加一节；

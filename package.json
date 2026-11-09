@@ -37,6 +37,7 @@
     "README.md",
     "README.en.md",
     "CHANGELOG.md",
+    "CHANGELOG.en.md",
     "LICENSE",
     "NOTICE.md",
     "NOTICE.en.md",
@@ -53,7 +54,8 @@
         "@deepseek-ai/dsh-client-ui-workspace"
       ],
       "platform": "web"
-    }
+    },
+    "manifestVersion": 1
   },
   "engines": {
     "node": ">=20",
@@ -70,7 +72,7 @@
     "build": "npm pack",
     "marketplace:check": "node scripts/marketplace-preflight.mjs",
     "prepack": "npm run build:client && npm run check",
-    "prepublishOnly": "npm run check"
+    "prepublishOnly": "npx --yes --package=github:TLEWA/dsh-plugin-ci#v1 dsh-ci-gate --prepublish"
   },
   "publishConfig": {
     "access": "public"

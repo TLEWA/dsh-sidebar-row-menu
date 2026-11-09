@@ -313,12 +313,12 @@ cmd /c rmdir "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\dsh-sidebar-ro
 ## 开发
 
 ```powershell
-npm install            # 只装 esbuild（唯一的 devDependency）
-npm run build:client   # src/client/** → lib/client.js（构建产物）
-npm run test           # 先构建再跑 node --test，逐文件子进程
-npm run test:local     # 受限终端 / 沙箱：--test-isolation=none，同进程跑
-npm run check          # 语法检查 + 产物与源码是否一致
-npm run build          # npm pack（prepack 会先构建 + check），产出 .tgz
+npm install
+npm run build:client
+npm run test
+npm run test:local
+npm run check
+npm run build
 ```
 
 客户端源码在 `src/client/**`（ESM，多文件），由 esbuild 打包成单文件 `lib/client.js`；

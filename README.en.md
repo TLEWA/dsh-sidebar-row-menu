@@ -366,12 +366,12 @@ pnpm install (npm or GitHub)" transition.
 ## Development
 
 ```powershell
-npm install            # installs esbuild, the only devDependency
-npm run build:client   # src/client/** → lib/client.js (build artifact)
-npm run test           # builds first, then node --test, one process per file
-npm run test:local     # restricted terminals / sandboxes: --test-isolation=none
-npm run check          # syntax check + artifact freshness
-npm run build          # npm pack (prepack builds and checks first), writes the .tgz
+npm install
+npm run build:client
+npm run test
+npm run test:local
+npm run check
+npm run build
 ```
 
 The client half lives in `src/client/**` (ESM, multiple files) and is bundled into the

@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## 1.12.0 — 2026-11-11
 
 - Adopt shared Codex PR review rules and repository-specific review guidance; preserve existing CI, human approval, and release behavior.
 

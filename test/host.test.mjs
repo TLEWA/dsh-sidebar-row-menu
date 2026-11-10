@@ -14,6 +14,7 @@ import {
   isLoopbackRequest,
   readPermissionDefaults,
   removeSessions,
+  resolveVscodeLauncher,
   toVscodeFileUrl,
 } from '../lib/index.js';
 
@@ -91,7 +92,7 @@ function createRoute(services) {
 }
 
 /** Build a host ctx whose session services are scripted by the test. */
-function createDeleteContext({ headers = [], live, calls = [], workspace } = {}) {
+function createDeleteContext({ headers = [], live, calls = [], workspace, agents, sessionController, listError } = {}) {
   let route;
   let listCalls = 0;
   const ctx = {
@@ -128,6 +129,7 @@ function createDeleteContext({ headers = [], live, calls = [], workspace } = {})
         return {
           async listSessions() {
             listCalls += 1;
+            if (listError !== undefined) throw listError;
             return headers.map((header) => ({ header }));
           },
         };
@@ -140,6 +142,8 @@ function createDeleteContext({ headers = [], live, calls = [], workspace } = {})
           },
         };
       }
+      if (name === 'agents') return agents;
+      if (name === 'sessionController') return sessionController;
       if (name === 'workspaceRegistry') {
         return {
           get(id) {
@@ -216,26 +220,69 @@ test('route validates the path before spawning anything', async () => {
   assert.equal(file.body.error, 'path-not-directory');
 });
 
-test('route survives a response whose socket is already closed', async () => {
-  const route = createRoute();
-  const request = Readable.from([Buffer.from(JSON.stringify({ target: 'explorer', path: dir }))]);
-  request.method = 'POST';
-  request.url = '/dsh-sidebar-row-menu/open';
-  request.headers = { host: '127.0.0.1:10102' };
-  request.socket = { remoteAddress: '127.0.0.1' };
-  const response = {
-    statusCode: 0,
-    setHeader() {
-      throw new Error('socket closed');
-    },
-    end() {
-      throw new Error('socket closed');
-    },
-  };
+test('open route reports a missing VS Code launcher instead of claiming success', async () => {
+  const previous = process.env.DSH_SCM_VSCODE;
+  process.env.DSH_SCM_VSCODE = join(dir, 'missing-vscode', 'code.exe');
+  try {
+    const route = createRoute();
+    const result = await call(route, { body: { target: 'vscode', path: dir } });
+    assert.equal(result.status, 500);
+    assert.deepEqual(result.body, { ok: false, error: 'vscode-launcher-missing' });
+  } finally {
+    if (previous === undefined) delete process.env.DSH_SCM_VSCODE;
+    else process.env.DSH_SCM_VSCODE = previous;
+  }
+});
 
-  await assert.doesNotReject(async () => {
-    await route.handler(request, response);
-  });
+test('resolveVscodeLauncher reports a broken override and recovers after it is fixed', () => {
+  const previous = process.env.DSH_SCM_VSCODE;
+  const fakeLauncher = join(dir, 'fake-code.exe');
+  writeFileSync(fakeLauncher, 'not a real executable');
+  try {
+    process.env.DSH_SCM_VSCODE = join(dir, 'missing-vscode', 'code.exe');
+    const broken = resolveVscodeLauncher();
+    assert.equal(broken.error, 'vscode-launcher-missing');
+    process.env.DSH_SCM_VSCODE = fakeLauncher;
+    const recovered = resolveVscodeLauncher();
+    assert.equal(recovered.command, fakeLauncher);
+  } finally {
+    if (previous === undefined) delete process.env.DSH_SCM_VSCODE;
+    else process.env.DSH_SCM_VSCODE = previous;
+  }
+});
+
+test('route survives a response whose socket is already closed', async () => {
+  // Never reach the real file manager here: use the vscode target with a
+  // non-executable fake launcher, so the route only attempts a spawn that
+  // fails without opening anything. The test is about the closed socket.
+  const previous = process.env.DSH_SCM_VSCODE;
+  const fakeLauncher = join(dir, 'fake-code.exe');
+  writeFileSync(fakeLauncher, 'not a real executable');
+  process.env.DSH_SCM_VSCODE = fakeLauncher;
+  try {
+    const route = createRoute();
+    const request = Readable.from([Buffer.from(JSON.stringify({ target: 'vscode', path: dir }))]);
+    request.method = 'POST';
+    request.url = '/dsh-sidebar-row-menu/open';
+    request.headers = { host: '127.0.0.1:10102' };
+    request.socket = { remoteAddress: '127.0.0.1' };
+    const response = {
+      statusCode: 0,
+      setHeader() {
+        throw new Error('socket closed');
+      },
+      end() {
+        throw new Error('socket closed');
+      },
+    };
+
+    await assert.doesNotReject(async () => {
+      await route.handler(request, response);
+    });
+  } finally {
+    if (previous === undefined) delete process.env.DSH_SCM_VSCODE;
+    else process.env.DSH_SCM_VSCODE = previous;
+  }
 });
 
 const DELETE_URL = '/dsh-sidebar-row-menu/session/delete';
@@ -278,6 +325,27 @@ test('delete route removes a cold session transcript and clears ledger entries',
     ['unpinSession', 'cold-session'],
     ['emit', 'api-session/removed', 'cold-session'],
   ]);
+});
+
+test('delete route reports a session-list failure instead of counting the session as missing', async () => {
+  const sessionDir = seedSession('cold-unlisted');
+  const calls = [];
+  const { route } = createDeleteContext({
+    headers: [],
+    calls,
+    listError: new Error('query offline'),
+  });
+  const result = await call(route, { url: DELETE_URL, body: { sessionIds: ['cold-unlisted'] } });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, false);
+  assert.equal(result.body.deleted, 0);
+  assert.equal(result.body.failed, 1);
+  assert.equal(result.body.code, 'batch-failed');
+  assert.match(result.body.error, /query offline/);
+  // The transcript survives because the delete never proved the session missing.
+  assert.equal(existsSync(sessionDir), true);
+  assert.deepEqual(calls, []);
 });
 
 test('delete route resolves the session index once for a whole batch', async () => {
@@ -397,6 +465,35 @@ test('workspace delete route rejects bad requests and unknown workspaces', async
   assert.equal(missing.body.missing, true);
 });
 
+test('a session that stays running after cancel is reported instead of deleted', async () => {
+  const sessionDir = seedSession('busy-session');
+  const calls = [];
+  let cancels = 0;
+  const { route } = createDeleteContext({
+    live: { header: { id: 'busy-session', cwd: dir } },
+    headers: [{ id: 'busy-session', cwd: dir }],
+    calls,
+    agents: { get: () => ({ status: 'running' }) },
+    sessionController: {
+      cancel() {
+        cancels += 1;
+        return Promise.resolve();
+      },
+    },
+  });
+
+  const result = await call(route, { url: DELETE_URL, body: { sessionIds: ['busy-session'] } });
+
+  assert.equal(cancels, 1);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, false);
+  assert.equal(result.body.deleted, 0);
+  assert.equal(result.body.failed, 1);
+  assert.equal(result.body.error.includes('still running'), true);
+  assert.equal(existsSync(sessionDir), true, 'a session that never stopped must keep its transcript');
+  assert.deepEqual(calls.filter((entry) => entry[0] === 'emit'), []);
+});
+
 test('workspace delete route removes every session before dropping the workspace', async () => {
   const first = seedSession('ws-session-1');
   const second = seedSession('ws-session-2');
@@ -424,6 +521,26 @@ test('workspace delete route removes every session before dropping the workspace
   assert.equal(existsSync(first), false);
   assert.equal(existsSync(second), false);
   assert.deepEqual(calls.at(-1), ['workspaceDelete', 'w1']);
+});
+
+test('workspace delete removes more than one batch of sessions instead of silently truncating', async () => {
+  const ids = Array.from({ length: 501 }, (_, i) => `ws-bulk-${i}`);
+  for (const id of ids) seedSession(id);
+  const calls = [];
+  const { route } = createDeleteContext({
+    headers: ids.map((id) => ({ id, cwd: dir })),
+    calls,
+    workspace: { id: 'w-bulk', title: 'Bulk', sessionIds: ids },
+  });
+
+  const result = await call(route, { url: WORKSPACE_DELETE_URL, body: { workspaceId: 'w-bulk' } });
+
+  assert.equal(result.status, 200);
+  assert.deepEqual(
+    { ok: result.body.ok, sessions: result.body.sessions, deleted: result.body.deleted, failed: result.body.failed, workspaceDeleted: result.body.workspaceDeleted },
+    { ok: true, sessions: 501, deleted: 501, failed: 0, workspaceDeleted: true },
+  );
+  assert.equal(ids.every((id) => !existsSync(join(dir, id))), true);
 });
 
 test('workspace delete route keeps the workspace when a session fails to delete', async () => {
@@ -483,6 +600,14 @@ test('permission defaults store sanitizes, persists and clears entries', () => {
   assert.equal(readPermissionDefaults(file).w2, 'read-only');
   writeFileSync(file, '{oops');
   assert.deepEqual(createPermissionDefaultsStore(file).read(), {});
+});
+
+test('permission defaults store creates a missing DSH_HOME on the first write', () => {
+  const file = join(dir, 'fresh-dsh-home', 'storages', 'dsh-sidebar-row-menu', 'permission-defaults.json');
+  assert.equal(existsSync(join(dir, 'fresh-dsh-home')), false);
+  const store = createPermissionDefaultsStore(file);
+  assert.deepEqual(store.set('w1', 'read-only'), { w1: 'read-only' });
+  assert.deepEqual(readPermissionDefaults(file), { w1: 'read-only' });
 });
 
 test('permission defaults route reads, validates and writes the mapping', async () => {

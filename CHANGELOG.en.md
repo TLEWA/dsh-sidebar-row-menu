@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Adopt shared Codex PR review rules and repository-specific review guidance; preserve existing CI, human approval, and release behavior.
+
 ### Summary
 
 The first permission-default write no longer fails on a fresh DSH_HOME. The archived-session toggle now works from the workspace ellipsis on 0.2.1.

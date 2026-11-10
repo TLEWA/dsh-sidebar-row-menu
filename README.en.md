@@ -680,3 +680,7 @@ Right-click menus are only one corner of DSH. These are the other plugins I main
 
 Commercial and non-commercial use are both allowed, but the project comes with
 **no warranty** under the MIT terms; review AI-assisted code before relying on it.
+
+## Codex PR review
+
+This repository adopts the v1 shared review block in AGENTS.md from [central CI](https://github.com/TLEWA/dsh-plugin-ci). Cloud Codex reviews PRs and new commits; maintainers retain final approval and merging. Review results must cover the latest commit. Review consumes subscription usage; use `@codex review` for missing results.

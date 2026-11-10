@@ -67,7 +67,7 @@ function placementOn(key, mode) {
 
 /** 工作区行是否至少有一项要在「…」菜单里显示（否则完全不接管原生菜单）。 */
 function workspaceEllipsisOn() {
-  return ['newSession', 'permissionDefault', 'openWith', 'copyPath', 'openInTab', 'deleteSessions']
+  return ['newSession', 'permissionDefault', 'openWith', 'copyPath', 'openInTab', 'deleteSessions', 'showArchived']
     .some((key) => showsInEllipsis(key));
 }
 

@@ -85,7 +85,7 @@ The entries added by this plugin:
 | Open with | A submenu of external apps provided by the host (editors, terminals, file managers) opening the session's `cwd`; falls back to its workspace directory. Hovering the row expands the submenu |
 | Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code"). Until configured, the first detected editor is pinned automatically, otherwise the first catalog app |
 | Delete session | On archived sessions by default; permanently deletes that one session and its transcript after confirmation. Enable "Allow deleting unarchived sessions" in Settings to show it on unarchived rows too |
-| Delete all archived sessions | Only on archived sessions; permanently deletes every archived session and its transcript after confirmation |
+| Delete all archived sessions | Only on archived sessions; permanently deletes every archived session and its transcript after confirmation. More than 500 archived sessions are sent in batches instead of failing on the per-request limit |
 
 The "Open with" catalog comes from DSH's built-in `open-in-app` routes, so it is the
 same source DSH itself uses; labels and icons are rendered by this plugin, each app
@@ -164,7 +164,7 @@ Settings → "Row menu" toggles every new entry:
 | Allow deleting unarchived sessions | Off by default; also shows "Delete session permanently" on unarchived rows. Requires the previous switch |
 | Delete all archived sessions | Hides the bulk-delete entry |
 | Show archived sessions | Hides the workspace "Show / hide archived sessions" entry (on by default; the entry itself only appears when that workspace has archived sessions) |
-| Menu placement → workspace | Per-entry choice between the right-click menu, the "…" menu, or both: New session, Default permission for new sessions, Open with, Copy workspace path, Open in new tab, archived-session toggle, Delete workspace and all sessions |
+| Menu placement → workspace | Per-entry choice between the right-click menu, the "…" menu, or both: New session, Default permission for new sessions, Open with, Copy workspace path, Open in new tab, archived-session toggle (placing it in the "…" menu also makes 0.2.1 take over the workspace ellipsis), Delete workspace and all sessions |
 | Menu placement → session | Per-entry choice for session-row entries: Open with, Delete session, Delete all archived sessions |
 | Enable blank-space context menu | Master switch for the conversation-body right-click menu (blank space, thinking blocks, replies; on by default); when off, that area keeps the browser/host native menu |
 | Pin "More" to the far right | On by default; keeps a "More actions" style overflow trigger as the last row regardless of its current toolbar position |
@@ -560,18 +560,27 @@ the row's existing menu.
 - VS Code resolution order: `DSH_SCM_VSCODE` → registry
   `HKCR\vscode\shell\open\command` → `%LOCALAPPDATA%` / `%ProgramFiles%`
   `bin\code.cmd` → `PATH`; if none is found it falls back to `rundll32` with
-  `vscode://file/...`;
+  `vscode://file/...`; a failed resolution is no longer cached forever, so the next
+  click re-probes after VS Code is installed;
+- `DSH_SCM_VSCODE` must point to an existing file; a missing path now returns 500
+  `vscode-launcher-missing` instead of silently falling back to another launcher;
 - spawn uses `detached + stdio:'ignore'` and deliberately does **not** set
-  `windowsHide` (otherwise Explorer windows would be hidden).
+  `windowsHide` (otherwise Explorer windows would be hidden); an asynchronous
+  launch failure (`error` event) now returns 500 `spawn-failed` instead of
+  pretending the app started.
 
 `POST /dsh-sidebar-row-menu/session/delete`, body `{ sessionIds: string[] }`.
 
 - same loopback / POST / exact path / 64 KB body checks; `sessionIds` must be a
   non-empty array of non-empty strings, at most 500;
-- sequential deletion: cancel a running session, detach a live one, then locate the
-  transcript directory through `sessionPersistence.locate()`; the directory's
-  basename must equal the session id or deletion is refused (no parent-directory
-  misfires);
+- before deleting, a running session is cancelled and given up to 3 seconds to stop;
+  if it is still running the session is reported as failed and its transcript kept
+  rather than removing files under an open handle; a live session is then detached
+  and the transcript directory located through `sessionPersistence.locate()`; the
+  directory's basename must equal the session id or deletion is refused (no
+  parent-directory misfires);
+- a cold session is looked up in the session list before deleting; when that query fails
+  the session is reported as failed instead of being counted as already gone;
 - after deleting, the directory is re-checked three times to ensure it did not come
   back, then the `workspaceRegistry` archive/pin records are cleared and
   `api-session/removed` is emitted;
@@ -582,7 +591,8 @@ the row's existing menu.
 
 - same loopback / POST / 64 KB body checks; `workspaceId` must be a non-empty string;
 - reads `workspaceRegistry.get(workspaceId).sessionIds` and permanently deletes each
-  session with the flow above;
+  session with the flow above; workspaces with more than 500 sessions keep going in
+  further batches instead of reporting success after the first 500;
 - only when every session was deleted (including sessions that were already gone)
   does it call `workspaceRegistry.delete()`; any failure returns `200` + `ok:false`
   and keeps the workspace, so no orphaned "Ungrouped" sessions are left behind;

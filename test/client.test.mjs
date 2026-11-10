@@ -796,6 +796,68 @@ test('unarchived sessions get the delete entry only after opting in', () => {
   assert.equal(optedIn.props.children, 'deleteSession');
 });
 
+test('deleting all archived sessions splits more than 500 ids into host-sized batches', async () => {
+  const archivedIds = ['s1', ...Array.from({ length: 500 }, (_, index) => `archived-${index}`)];
+  const posts = [];
+  const fetch = async (_url, init = {}) => {
+    const body = JSON.parse(init.body);
+    posts.push(body.sessionIds);
+    // 宿主路由只接受一批 500 个，超出直接 400。
+    if (body.sessionIds.length > 500) {
+      return { status: 400, json: async () => ({ ok: false, deleted: 0, failed: body.sessionIds.length, error: 'bad-request' }) };
+    }
+    return {
+      status: 200,
+      json: async () => ({ ok: true, deleted: body.sessionIds.length, missing: 0, failed: 0, error: '' }),
+    };
+  };
+
+  const { registration, listeners } = loadClient({}, { fetch });
+  const exported = registration.factory(makeRequire([], [], []));
+  const ctx = makeCtx({
+    workspaces: {
+      list: {
+        getSnapshot: () => ({ archivedSessionIds: archivedIds }),
+        subscribe: () => () => {},
+      },
+    },
+  });
+  exported.apply(ctx);
+  fireContextMenu(
+    listeners[listeners.length - 1].listener,
+    makeRowTarget(
+      'session:s1',
+      { node: { id: 's1', title: 'Session 1', blank: false }, onRenameRequest: () => {} },
+      { open: false, anchor: { props: { onClick: () => {} } } },
+    ),
+  );
+
+  const t = (key) => key;
+  const archivedEntry = ctx.slots.registrations.find((entry) => entry.spec.id === 'row-menu-delete-archived');
+  assert.ok(archivedEntry, 'the archived delete entry must be registered');
+  const item = archivedEntry.Component({
+    sessionId: 's1',
+    displayTitle: 'Session 1',
+    useMenuOpenState: () => [true, () => {}],
+    t,
+  });
+  assert.ok(item, 'an archived session must expose the bulk delete entry');
+  item.props.onSelect();
+
+  const overlay = ctx.slots.registrations.find((entry) => entry.spec.name === 'shell.overlay');
+  assert.ok(overlay, 'the delete dialog must live on shell.overlay');
+  const dialog = overlay.Component({ t });
+  assert.ok(dialog !== null, 'the delete request must open the confirmation dialog');
+  const form = dialog.type(dialog.props);
+  const footer = form.props.footer;
+  const confirm = footer.props.children[1].props.onClick;
+  confirm();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  assert.deepEqual(posts.map((batch) => batch.length), [500, 1]);
+  assert.deepEqual(posts.flat().sort(), [...archivedIds].sort());
+});
+
 test('workspace ellipsis stays native until an entry is enabled', () => {
   const { registration, documentListeners } = loadClient();
   const roots = [];
@@ -826,6 +888,51 @@ test('workspace ellipsis stays native until an entry is enabled', () => {
   // No entry opted in: the click is left to the official menu.
   assert.equal(prevented, false);
   assert.equal(roots.length, 0);
+});
+
+test('workspace ellipsis opens for the archived toggle on 0.2.1', () => {
+  const ELLIPSIS_KEY = 'dsh.sidebar-row-menu.ellipsis.v1';
+  const { registration, documentListeners } = loadClient({
+    [ELLIPSIS_KEY]: JSON.stringify({ showArchived: true }),
+  });
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  exported.apply(makeCtx({
+    workspaces: {
+      list: {
+        getSnapshot: () => ({
+          items: [{ workspaceId: 'w1', sessionIds: ['s1', 's2'] }],
+          archivedSessionIds: ['s2'],
+        }),
+        subscribe: () => () => {},
+      },
+    },
+  }));
+
+  const click = documentListeners.find((entry) => entry.type === 'click').listener;
+  const props = {
+    group: { key: 'w1', workspaceId: 'w1', label: 'Work', cwd: 'C:\\Work' },
+    actions: { rename: () => {}, delete: () => {} },
+    onCreate: () => {},
+  };
+  const target = makeRowTarget('workspace:w1', props);
+  let prevented = false;
+  const button = {
+    getAttribute: () => null,
+    getBoundingClientRect: () => ({ left: 100, top: 20, width: 24, height: 24, bottom: 44 }),
+  };
+  const row = target.row;
+  target.closest = (selector) => (selector === '[data-row-key]' ? row : selector === 'button' ? button : null);
+  row.contains = (value) => value === button;
+  row.querySelectorAll = () => [button, {}];
+
+  click({ defaultPrevented: false, button: 0, target, preventDefault: () => { prevented = true; }, stopPropagation: () => {} });
+
+  assert.equal(prevented, true);
+  const rows = workspaceRows(roots);
+  const archived = rows.find((entry) => entry.props.key === 'archived');
+  assert.ok(archived, 'the archived toggle must be reachable from the workspace ellipsis');
+  assert.equal(archived.props.children, 'showArchivedSessions');
 });
 
 test('workspace ellipsis menu only carries the enabled extras', () => {

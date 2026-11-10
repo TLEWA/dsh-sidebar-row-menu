@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### 中文摘要
+
+- **全新的 DSH_HOME 第一次保存「新会话默认权限」不再报 ENOENT。** 之前写锁文件时父目录还不存在，第一次写入必失败；现在先建目录再拿锁。
+- **删除工作区不再静默漏删 500 个以上的会话。** 之前批量删除只处理前 500 个会话，却仍返回成功并摘掉工作区登记，剩下的会话日志永远没人清理；现在按同一流程处理完全部会话，失败就保留工作区。
+- **已归档会话超过 500 个时「删除所有已归档会话」不再整批失败。** 宿主单次最多接收 500 个 id，客户端现在按 500 一批串行提交并合并结果；之前一次 POST 全部 id 会被宿主 400 拒绝，入口等于不可用。
+- **运行中的会话等不到停止时不再强删。** 之前最多等 3 秒就照常 `rm`，Windows 上容易撞上 EBUSY 并留下删不掉的目录；现在仍在上报失败并保留日志，让用户稍后重试。
+- **「在 VS Code 中打开」启动失败不再假装成功。** 之前 `spawn` 的异步 `error` 被吞掉、`DSH_SCM_VSCODE` 也不校验，坏启动器仍返回 200，用户点击后没有任何反应；现在覆盖路径不存在直接返回 `vscode-launcher-missing`，异步启动失败返回 `spawn-failed`，解析失败的结果也不再永久缓存。
+- **单独把「归档会话开关」放进工作区「…」菜单后，0.2.1 上入口不再消失。** 工作区省略号的接管判断漏掉了这个条目，单独启用时原生菜单照旧弹出；现在它和其它工作区条目一样会接管。
+- **会话列表读不到时不再把冷会话当成「已删除」。** 之前 `listSessions` 抛错会被吞掉，日志还在盘上的会话被记为 missing 并返回成功，归档 / 置顶记录也被清掉；现在按失败上报并保留日志。
+
+### Changed
+
+- **The first permission-default write no longer fails on a fresh `DSH_HOME`.** The lock file was opened before its parent directory existed, so the very first save threw ENOENT; the directory is now created before the lock is taken.
+
 ## 1.11.2 — 2026-11-08
 
 ### 中文摘要

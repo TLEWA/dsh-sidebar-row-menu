@@ -1,5 +1,21 @@
 # Changelog
 
+## [Unreleased]
+
+### Summary
+
+The first permission-default write no longer fails on a fresh DSH_HOME. The archived-session toggle now works from the workspace ellipsis on 0.2.1.
+
+### Changed
+
+- **The first permission-default write no longer fails on a fresh `DSH_HOME`.** The lock file was opened before its parent directory existed, so the very first save threw ENOENT; the directory is now created before the lock is taken.
+- **Deleting a workspace no longer silently skips sessions beyond 500.** The batch used to stop after the first 500 ids yet still report success and unregister the workspace, leaving the rest of the transcripts unmanaged; it now processes every session and keeps the workspace on any failure.
+- **"Delete all archived sessions" no longer fails as a whole beyond 500 archived sessions.** The host accepts at most 500 ids per request, so the client now submits them in batches of 500 and merges the counts; previously one POST with every id was rejected with 400 and the entry was effectively unusable.
+- **A session that does not stop within the wait is no longer force-deleted.** The host used to wait at most 3 seconds and then `rm` anyway, which easily hit EBUSY on Windows and left an undeletable directory; it now reports the failure and keeps the transcript so the user can retry.
+- **"Open in VS Code" no longer pretends a failed launch succeeded.** The asynchronous `spawn` error used to be swallowed and `DSH_SCM_VSCODE` was never validated, so a broken launcher still returned 200 and the click did nothing; a missing override now returns `vscode-launcher-missing`, an asynchronous launch failure returns `spawn-failed`, and a failed resolution is no longer cached forever.
+- **The archived-session toggle is reachable from the workspace "…" menu on 0.2.1.** The workspace-ellipsis takeover check omitted this entry, so enabling it alone left the native menu in place; it now takes over like the other workspace entries.
+- **A cold session is no longer counted as deleted when the session list cannot be read.** A failing `listSessions` was swallowed and its existing transcript was reported as missing (success), clearing the archive/pin records too; the delete now reports the failure and keeps the transcript.
+
 ## 1.11.2 — 2026-11-08
 
 ### Summary

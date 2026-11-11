@@ -48,7 +48,8 @@ function probeDesktop() {
         return desktop;
       })
       .catch(() => {
-        desktop = false;
+        // 探测抛错多半是临时断连：保持未知，下次右键再试，别让一次故障永久关掉文件打开。
+        desktop = null;
         return false;
       })
       .finally(() => {

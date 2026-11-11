@@ -382,12 +382,12 @@ function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
   const submenuApps = enabledApps.filter((id) => !pinnedIds.has(id));
 
   // 文件模式只列系统登记的程序：置顶的若恰好也在其中就平铺，其余进子菜单。
-  const filePinned = fileMode && Array.isArray(fileApps)
-    ? fileApps.filter((app) => pinnedIds.has(app.id))
+  // 逐应用开关同样作用于文件模式：系统关联里被用户关掉的应用不出现。
+  const fileEnabled = fileMode && Array.isArray(fileApps)
+    ? fileApps.filter((app) => childOn(app.id))
     : [];
-  const fileSubmenu = fileMode && Array.isArray(fileApps)
-    ? fileApps.filter((app) => !pinnedIds.has(app.id))
-    : [];
+  const filePinned = fileEnabled.filter((app) => pinnedIds.has(app.id));
+  const fileSubmenu = fileEnabled.filter((app) => !pinnedIds.has(app.id));
 
   let panelBody;
   if (fileMode) {

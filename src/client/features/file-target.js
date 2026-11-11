@@ -20,7 +20,8 @@ function elementOf(target) {
 
 /** 相对路径按会话目录拼成绝对路径；传进来的绝对路径原样返回。 */
 function absolutePath(value, cwd) {
-  const raw = String(value ?? '').replace(/\s+/g, ' ').trim();
+  // 路径不是展示文案：只裁剪首尾空白，保留文件名/目录名里连续的空格。
+  const raw = String(value ?? '').trim();
   if (raw === '' || raw.length > MAX_PATH_LENGTH) return '';
   if (ABSOLUTE_PATH.test(raw)) return raw;
   if (typeof cwd !== 'string' || cwd === '') return '';

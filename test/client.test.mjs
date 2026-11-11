@@ -1728,6 +1728,13 @@ test('file targets ignore skill chips and plain message text', () => {
 
   const plain = fakeNode({ text: '没有文件路径的普通正文' });
   assert.equal(exported.fileTargetAt(plain, 'C:/repo'), null);
+
+  // 相对路径里的连续空格是真实存在的：只裁首尾，不能把中间压成一个空格。
+  const spacedChip = fakeNode({ attrs: { 'data-ref-chip': 'file' }, text: 'my  project/report.md' });
+  assert.deepEqual(
+    [...exported.fileTargetAt(spacedChip, 'C:/repo').paths],
+    ['C:/repo/my  project/report.md'],
+  );
 });
 
 
@@ -1812,6 +1819,27 @@ test('file open degrades to no handler when the host lacks the Remote', async ()
   assert.equal(await exported.desktopReady(), false);
   assert.equal(await exported.openFilesDefault(['C:/repo/a.js']), false);
   assert.equal(await exported.revealFiles(['C:/repo/a.js']), false);
+});
+
+test('a failed desktop capability probe is retried on the next attempt', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  let calls = 0;
+  const remote = {
+    canOpenWorkspacePath: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('offline');
+      return { ok: true, value: true };
+    },
+    workspacePathApplications: async () => ({ ok: true, value: [] }),
+    openWorkspacePath: async () => ({ ok: true }),
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  // 第一次探测失败只代表这一刻连不上，不能把「桌面不可用」永久缓存。
+  assert.equal(await exported.desktopReady(), false);
+  assert.equal(await exported.desktopReady(), true);
+  assert.equal(calls, 2);
 });
 
 test('header actions slot entries stay hidden until enabled', () => {

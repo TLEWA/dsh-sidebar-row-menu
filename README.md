@@ -227,7 +227,7 @@ https://github.com/TLEWA/dsh-sidebar-row-menu#v1.4.2
 也可以直接安装 Actions 打出的压缩包（不经过 Git）：
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.13.0/dsh-sidebar-row-menu-1.13.0.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.12.0/dsh-sidebar-row-menu-1.12.0.tgz
 ```
 
 命令行等价写法：

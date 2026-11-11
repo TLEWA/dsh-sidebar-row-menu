@@ -18,6 +18,7 @@ const STYLE = `
 .dsrm-header-icon svg{width:14px;height:14px;display:block}
 .dsrm-header-icon-img{width:14px;height:14px;border-radius:3px;display:block;object-fit:contain}
 .dsrm-openwith{display:block}
+.dsrm-openwith-note{padding:4px 12px 2px;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dsrm-sep{height:.5px;margin:3px 8px;background:var(--dsw-alias-border-l2)}
 /* 150% 缩放等分数像素比下，宿主 0.5px 的分隔线会被摊成两行近乎透明，补到 1px 才看得见。 */
 @media (min-resolution:1.2dppx) and (max-resolution:1.99dppx){[role="menu"] [role="separator"],.dsrm-sep{height:1px}}

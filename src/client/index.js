@@ -62,3 +62,5 @@ export function apply(ctx) {
 
 // 供测试/调试用：确保 closeMenu/closeToast 在卸载时可达。
 export { closeMenu, closeToast };
+// 供测试使用：正文右键落点的文件解析。
+export { fileTargetAt } from './features/file-target.js';

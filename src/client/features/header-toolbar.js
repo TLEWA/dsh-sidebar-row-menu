@@ -286,7 +286,7 @@ function selectedSessionId() {
  * 空白菜单里的「打开方式」组：与原生工作区 / 会话右键同一套数据 ——
  * 置顶应用直接平铺，其余收进「打开方式」子菜单；开关、置顶与子项都在设置页配置。
  */
-function BlankOpenWithRows({ t, cwd, separatorBefore, onClose }) {
+function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
   const apps = useApps();
   useChildren();
   usePinned();
@@ -299,11 +299,16 @@ function BlankOpenWithRows({ t, cwd, separatorBefore, onClose }) {
   // 面板先隐藏挂载再量真实尺寸，位置按真实宽高算。
   const box = useSubmenuPos(open, hostRef, [apps.status, apps.ids]);
 
+  // 指针落在文件卡片 / 文件引用上时开那些文件；否则沿用会话工作区目录。
+  const filePaths = Array.isArray(paths) ? paths.filter((path) => typeof path === 'string' && path !== '') : [];
+  const targets = filePaths.length > 0 ? filePaths : (typeof cwd === 'string' && cwd !== '' ? [cwd] : []);
+
   const pick = (appId) => {
     setOpen(false);
     onClose();
-    openApplication(appId, cwd).then((ok) => {
-      if (!ok) toast(t('openFailed'));
+    Promise.allSettled(targets.map((path) => openApplication(appId, path))).then((results) => {
+      const failed = results.some((result) => result.status !== 'fulfilled' || result.value !== true);
+      if (failed) toast(t('openFailed'));
     });
   };
 
@@ -329,6 +334,9 @@ function BlankOpenWithRows({ t, cwd, separatorBefore, onClose }) {
 
   return h(Fragment, null,
     separatorBefore ? h('div', { className: 'dsrm-sep', role: 'separator' }) : null,
+    filePaths.length > 1
+      ? h('div', { className: 'dsrm-openwith-note' }, t('openWithFiles', { count: String(filePaths.length) }))
+      : null,
     Array.from(pinnedIds).map((id) => jsx(MenuItemButton, {
       key: `pinned-${id}`,
       onSelect: () => pick(id),
@@ -581,7 +589,7 @@ function BlankMoreRows({ label, icon, controller, separatorBefore, onClose, chil
  * 先关菜单再派发 click，宿主弹出层才能正常锚定到原按钮。
  * 「打开方式」整组换成和原生右键一致的置顶应用 + 子菜单，其余按钮原样复刻。
  */
-function HeaderToolbarMenu({ x, y, items, t, sessionId, onClose }) {
+function HeaderToolbarMenu({ x, y, items, t, sessionId, fileTarget, onClose }) {
   const hostRef = useRef(null);
   const pos = useMenuPos(hostRef, x, y, []);
   const itemsConfig = useItems();
@@ -595,11 +603,16 @@ function HeaderToolbarMenu({ x, y, items, t, sessionId, onClose }) {
   // 位置由 useMenuPos 统一夹取：菜单行数随工具条内容变化，尺寸变了再夹一次。
 
   const cwd = typeof sessionId === 'string' && sessionId !== '' ? sessionCwd(rootCtx, sessionId) : '';
+  // 指针在文件卡片 / 文件引用上时，打开方式作用于那些文件；否则退回会话目录。
+  const filePaths = Array.isArray(fileTarget?.paths)
+    ? fileTarget.paths.filter((path) => typeof path === 'string' && path !== '')
+    : [];
+  const targets = filePaths.length > 0 ? filePaths : (cwd !== '' ? [cwd] : []);
   const enabledApps = apps.ids.filter((id) => childOn(id));
-  // 工具条上的 split「打开方式」只有在能拿到会话目录、且设置里开着时才接管；
+  // 工具条上的 split「打开方式」只有在能拿到目标路径、且设置里开着时才接管；
   // 否则保留宿主的两个原按钮，菜单仍然是工具条的镜像。
   const ownOpenWith = itemsConfig.openWith !== false
-    && cwd !== ''
+    && targets.length > 0
     && enabledApps.length > 0
     && items.some((item) => item.openWith);
 
@@ -623,6 +636,7 @@ function HeaderToolbarMenu({ x, y, items, t, sessionId, onClose }) {
           key: 'open-with',
           t,
           cwd,
+          paths: filePaths,
           separatorBefore: takeSeparator('open-with'),
           onClose,
         }));
@@ -674,7 +688,7 @@ function HeaderToolbarMenu({ x, y, items, t, sessionId, onClose }) {
   }, h(MenuSurface, { role: 'group', className: 'dsrm-menu-surface dsrm-header-menu' }, rows));
 }
 
-function openHeaderToolbarMenu(items, x, y, sessionId = '') {
+function openHeaderToolbarMenu(items, x, y, sessionId = '', fileTarget = null) {
   if (items.length === 0) return;
   beginMenu('header-toolbar').render(jsx(HeaderToolbarMenu, {
     x,
@@ -682,6 +696,7 @@ function openHeaderToolbarMenu(items, x, y, sessionId = '') {
     items,
     t: localeOf(rootCtx),
     sessionId,
+    fileTarget,
     onClose: () => closeMenu(),
   }));
 }

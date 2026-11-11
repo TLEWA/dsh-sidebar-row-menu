@@ -1604,6 +1604,132 @@ test('right-click inside a tool card opens the blank menu', () => {
   assert.equal(link.defaultPrevented, false);
 });
 
+/* --------------------------------------- file targets under the pointer */
+
+/** Minimal element tree for fileTargetAt: closest / querySelector(All) over plain data. */
+function fakeNode({ tag = 'div', attrs = {}, text = '', children = [], parent = null } = {}) {
+  const node = {
+    nodeType: 1,
+    tagName: String(tag).toUpperCase(),
+    attrs,
+    children,
+    parentElement: parent,
+    getAttribute(name) {
+      return Object.hasOwn(attrs, name) ? attrs[name] : null;
+    },
+    get textContent() {
+      return text + children.map((child) => child.textContent).join('');
+    },
+    contains(other) {
+      let current = other;
+      while (current !== null && current !== undefined) {
+        if (current === node) return true;
+        current = current.parentElement;
+      }
+      return false;
+    },
+    closest(selector) {
+      let current = node;
+      while (current !== null && current !== undefined) {
+        if (matchesFakeSelector(current, selector)) return current;
+        current = current.parentElement;
+      }
+      return null;
+    },
+    querySelector(selector) {
+      return node.querySelectorAll(selector)[0] ?? null;
+    },
+    querySelectorAll(selector) {
+      const found = [];
+      const walk = (current) => {
+        for (const child of current.children) {
+          if (matchesFakeSelector(child, selector)) found.push(child);
+          walk(child);
+        }
+      };
+      walk(node);
+      return found;
+    },
+  };
+  for (const child of children) child.parentElement = node;
+  return node;
+}
+
+function matchesFakeSelector(node, selector) {
+  const text = String(selector);
+  const tagMatch = /^([a-z]+)?(?:\[([a-z-]+)(?:="([^"]*)")?\])?$/i.exec(text);
+  if (tagMatch === null) return false;
+  const [, tag, attr, value] = tagMatch;
+  if (tag !== undefined && node.tagName !== tag.toUpperCase()) return false;
+  if (attr === undefined) return true;
+  const actual = node.getAttribute(attr);
+  if (actual === null) return false;
+  return value === undefined || actual === value;
+}
+
+test('a changed-files card opens the file row under the pointer, not the workspace', () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const first = fakeNode({ tag: 'li', children: [
+    fakeNode({ tag: 'button' }),
+    fakeNode({ tag: 'span', attrs: { hidden: '' }, text: 'C:/repo/dsh-fastload/index.js' }),
+  ] });
+  const second = fakeNode({ tag: 'li', children: [
+    fakeNode({ tag: 'button' }),
+    fakeNode({ tag: 'span', attrs: { hidden: '' }, text: 'C:/repo/lib/_fix.mjs' }),
+  ] });
+  const card = fakeNode({ attrs: { 'data-changed-files': '' }, children: [first, second] });
+
+  const row = exported.fileTargetAt(first.children[0], 'C:/repo');
+  assert.deepEqual([...row.paths], ['C:/repo/dsh-fastload/index.js']);
+  assert.equal(row.kind, 'changed-files');
+
+  // 卡片空白处（行与行的间隙）：这一轮的全部变更文件。
+  const all = exported.fileTargetAt(card, 'C:/repo');
+  assert.deepEqual([...all.paths], ['C:/repo/dsh-fastload/index.js', 'C:/repo/lib/_fix.mjs']);
+});
+
+test('presented cards and message attachments resolve to their own files', () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+
+  const presented = fakeNode({ attrs: { 'data-presented-file': '' }, children: [
+    fakeNode({ tag: 'button', attrs: { title: 'C:/repo/out/report.pdf' } }),
+  ] });
+  assert.deepEqual([...exported.fileTargetAt(presented, 'C:/repo').paths], ['C:/repo/out/report.pdf']);
+
+  const attachment = fakeNode({ attrs: { 'data-message-attachments': '' }, children: [
+    fakeNode({ tag: 'span', attrs: { title: 'C:/tmp/uploads/note.md' } }),
+    fakeNode({ tag: 'span', attrs: { title: 'C:/tmp/uploads/other.md' } }),
+  ] });
+  // 点哪一个附件就只开哪一个；点行内空白处则开这一行的全部附件。
+  assert.deepEqual([...exported.fileTargetAt(attachment.children[0], 'C:/repo').paths], ['C:/tmp/uploads/note.md']);
+  assert.deepEqual(
+    [...exported.fileTargetAt(attachment, 'C:/repo').paths],
+    ['C:/tmp/uploads/note.md', 'C:/tmp/uploads/other.md'],
+  );
+
+  // 附件目录不在工作区里，只有文件名时宁可不猜（否则编辑器会新建空文件）。
+  const bare = fakeNode({ attrs: { 'data-message-attachments': '' }, children: [
+    fakeNode({ tag: 'span', attrs: { title: 'note.md' } }),
+  ] });
+  assert.equal(exported.fileTargetAt(bare, 'C:/repo'), null);
+});
+
+test('file targets ignore skill chips and plain message text', () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+
+  const skill = fakeNode({ attrs: { 'data-ref-chip': 'skill' }, text: 'dsh-plugin-dev' });
+  assert.equal(exported.fileTargetAt(skill, 'C:/repo'), null);
+
+  const fileChip = fakeNode({ attrs: { 'data-ref-chip': 'file' }, text: 'src/index.js' });
+  assert.deepEqual([...exported.fileTargetAt(fileChip, 'C:/repo').paths], ['C:/repo/src/index.js']);
+
+  const plain = fakeNode({ text: '没有文件路径的普通正文' });
+  assert.equal(exported.fileTargetAt(plain, 'C:/repo'), null);
+});
+
 test('header actions slot entries stay hidden until enabled', () => {
   for (const enabled of [false, true]) {
     const stored = enabled

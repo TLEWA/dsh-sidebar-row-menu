@@ -127,6 +127,13 @@ the original button's icon:
   move into an "Open with ›" submenu that expands on hover or click. The "Open with"
   master switch, per-app switches and pinning all apply; turning the master switch off
   removes the whole group;
+- when the pointer is on a file card in the message body, "Open with" opens **those files**
+  instead of the session directory: clicking one row of the changed-files card opens just that
+  row, while clicking the card's blank space opens the whole card; presented-file cards,
+  message attachments and @ file references open their own paths too. Only when no absolute
+  path can be resolved (e.g. an attachment that only carries a file name) does it fall back to
+  the session directory, so an editor does not create an empty file; opening several files at
+  once shows an "N files" note at the top of the menu;
 - "More actions" no longer opens the header "…" popover: it expands in place like the
   other submenus and mirrors the host menu's entries (Copy session as Markdown, Download
   session log, Feedback, …), and picking one runs it immediately. Its row order follows

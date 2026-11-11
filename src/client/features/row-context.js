@@ -1,4 +1,6 @@
 import { fiberOf, resolveSessionRow, resolveWorkspaceRow } from '../dom.js';
+import { sessionCwd } from '../host-api.js';
+import { fileTargetAt } from './file-target.js';
 import { activeSessionHeader, collectHeaderToolbarItems, isBlankConversationTarget, openHeaderToolbarMenu, selectedSessionId } from './header-toolbar.js';
 import { contextMenusOf } from './session-menu.js';
 import { openWorkspaceMenu } from './workspace-menu.js';
@@ -24,7 +26,10 @@ function onBlankConversationContextMenu(event) {
     /* ignore */
   }
   try {
-    openHeaderToolbarMenu(items, event.clientX, event.clientY, selectedSessionId());
+    const sessionId = selectedSessionId();
+    // 指针落在文件卡片 / 文件引用上时，打开方式要开那个文件，而不是会话目录。
+    const fileTarget = fileTargetAt(event.target, sessionId === '' ? '' : sessionCwd(rootCtx, sessionId));
+    openHeaderToolbarMenu(items, event.clientX, event.clientY, sessionId, fileTarget);
   } catch (error) {
     console.warn('[dsh-sidebar-row-menu] blank context menu failed:', error);
   }

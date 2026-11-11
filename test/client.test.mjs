@@ -183,7 +183,7 @@ test('client module registers the expected factory and exports', () => {
   assert.equal(exported.name, 'sidebar-row-menu');
   assert.equal(typeof exported.apply, 'function');
   // The array lives in the vm realm, so compare by value rather than prototype.
-  assert.equal(exported.inject.join(','), 'locale,sessions,workspaces,slots');
+  assert.equal(exported.inject.join(','), 'locale,sessions,workspaces,slots,remote,remote.session');
   assert.equal(
     [...new Set(seen)].sort().join(','),
     [
@@ -1602,6 +1602,244 @@ test('right-click inside a tool card opens the blank menu', () => {
   // 卡片里的链接仍然让位给原生菜单。
   const link = fireContextMenu(listener, makeConversationTarget({ tool: true, control: true }));
   assert.equal(link.defaultPrevented, false);
+});
+
+/* --------------------------------------- file targets under the pointer */
+
+/** Minimal element tree for fileTargetAt: closest / querySelector(All) over plain data. */
+function fakeNode({ tag = 'div', attrs = {}, text = '', children = [], parent = null } = {}) {
+  const node = {
+    nodeType: 1,
+    tagName: String(tag).toUpperCase(),
+    attrs,
+    children,
+    parentElement: parent,
+    getAttribute(name) {
+      return Object.hasOwn(attrs, name) ? attrs[name] : null;
+    },
+    get textContent() {
+      return text + children.map((child) => child.textContent).join('');
+    },
+    contains(other) {
+      let current = other;
+      while (current !== null && current !== undefined) {
+        if (current === node) return true;
+        current = current.parentElement;
+      }
+      return false;
+    },
+    closest(selector) {
+      let current = node;
+      while (current !== null && current !== undefined) {
+        if (matchesFakeSelector(current, selector)) return current;
+        current = current.parentElement;
+      }
+      return null;
+    },
+    querySelector(selector) {
+      return node.querySelectorAll(selector)[0] ?? null;
+    },
+    querySelectorAll(selector) {
+      const found = [];
+      const walk = (current) => {
+        for (const child of current.children) {
+          if (matchesFakeSelector(child, selector)) found.push(child);
+          walk(child);
+        }
+      };
+      walk(node);
+      return found;
+    },
+  };
+  for (const child of children) child.parentElement = node;
+  return node;
+}
+
+function matchesFakeSelector(node, selector) {
+  const text = String(selector);
+  const tagMatch = /^([a-z]+)?(?:\[([a-z-]+)(?:="([^"]*)")?\])?$/i.exec(text);
+  if (tagMatch === null) return false;
+  const [, tag, attr, value] = tagMatch;
+  if (tag !== undefined && node.tagName !== tag.toUpperCase()) return false;
+  if (attr === undefined) return true;
+  const actual = node.getAttribute(attr);
+  if (actual === null) return false;
+  return value === undefined || actual === value;
+}
+
+test('a changed-files card opens the file row under the pointer, not the workspace', () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const first = fakeNode({ tag: 'li', children: [
+    fakeNode({ tag: 'button' }),
+    fakeNode({ tag: 'span', attrs: { hidden: '' }, text: 'C:/repo/dsh-fastload/index.js' }),
+  ] });
+  const second = fakeNode({ tag: 'li', children: [
+    fakeNode({ tag: 'button' }),
+    fakeNode({ tag: 'span', attrs: { hidden: '' }, text: 'C:/repo/lib/_fix.mjs' }),
+  ] });
+  const card = fakeNode({ attrs: { 'data-changed-files': '' }, children: [first, second] });
+
+  const row = exported.fileTargetAt(first.children[0], 'C:/repo');
+  assert.deepEqual([...row.paths], ['C:/repo/dsh-fastload/index.js']);
+  assert.equal(row.kind, 'changed-files');
+
+  // 卡片空白处（行与行的间隙）：这一轮的全部变更文件。
+  const all = exported.fileTargetAt(card, 'C:/repo');
+  assert.deepEqual([...all.paths], ['C:/repo/dsh-fastload/index.js', 'C:/repo/lib/_fix.mjs']);
+});
+
+test('presented cards and message attachments resolve to their own files', () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+
+  const presented = fakeNode({ attrs: { 'data-presented-file': '' }, children: [
+    fakeNode({ tag: 'button', attrs: { title: 'C:/repo/out/report.pdf' } }),
+  ] });
+  assert.deepEqual([...exported.fileTargetAt(presented, 'C:/repo').paths], ['C:/repo/out/report.pdf']);
+
+  const attachment = fakeNode({ attrs: { 'data-message-attachments': '' }, children: [
+    fakeNode({ tag: 'span', attrs: { title: 'C:/tmp/uploads/note.md' } }),
+    fakeNode({ tag: 'span', attrs: { title: 'C:/tmp/uploads/other.md' } }),
+  ] });
+  // 点哪一个附件就只开哪一个；点行内空白处则开这一行的全部附件。
+  assert.deepEqual([...exported.fileTargetAt(attachment.children[0], 'C:/repo').paths], ['C:/tmp/uploads/note.md']);
+  assert.deepEqual(
+    [...exported.fileTargetAt(attachment, 'C:/repo').paths],
+    ['C:/tmp/uploads/note.md', 'C:/tmp/uploads/other.md'],
+  );
+
+  // 附件目录不在工作区里，只有文件名时宁可不猜（否则编辑器会新建空文件）。
+  const bare = fakeNode({ attrs: { 'data-message-attachments': '' }, children: [
+    fakeNode({ tag: 'span', attrs: { title: 'note.md' } }),
+  ] });
+  assert.equal(exported.fileTargetAt(bare, 'C:/repo'), null);
+});
+
+test('file targets ignore skill chips and plain message text', () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+
+  const skill = fakeNode({ attrs: { 'data-ref-chip': 'skill' }, text: 'dsh-plugin-dev' });
+  assert.equal(exported.fileTargetAt(skill, 'C:/repo'), null);
+
+  const fileChip = fakeNode({ attrs: { 'data-ref-chip': 'file' }, text: 'src/index.js' });
+  assert.deepEqual([...exported.fileTargetAt(fileChip, 'C:/repo').paths], ['C:/repo/src/index.js']);
+
+  const plain = fakeNode({ text: '没有文件路径的普通正文' });
+  assert.equal(exported.fileTargetAt(plain, 'C:/repo'), null);
+
+  // 相对路径里的连续空格是真实存在的：只裁首尾，不能把中间压成一个空格。
+  const spacedChip = fakeNode({ attrs: { 'data-ref-chip': 'file' }, text: 'my  project/report.md' });
+  assert.deepEqual(
+    [...exported.fileTargetAt(spacedChip, 'C:/repo').paths],
+    ['C:/repo/my  project/report.md'],
+  );
+});
+
+
+test('file open uses Host Remote file handlers instead of the directory route', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const calls = [];
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      calls.push(['apps', path]);
+      return {
+        ok: true,
+        value: [
+          { id: 'vscode', name: 'Visual Studio Code', default: false, icon: 'data:image/png;base64,x' },
+          { id: 'notepad', name: 'Notepad', default: true, icon: null },
+        ],
+      };
+    },
+    openWorkspacePath: async (request) => {
+      calls.push(['open', request]);
+      return { ok: true };
+    },
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  const apps = await exported.fileApplications(['C:/repo/a.js', 'C:/repo/b.js']);
+  // vm 里创建的数组原型不同，取成主 realm 的数组再比较。
+  assert.deepEqual(Array.from(apps, (app) => app.id), ['vscode', 'notepad']);
+  assert.equal(apps[0].default, false);
+  assert.equal(apps[1].default, true);
+  assert.equal(apps[1].icon, '');
+
+  // 同一批文件第二次直接命中缓存，不再请求宿主。
+  const before = calls.filter((entry) => entry[0] === 'apps').length;
+  await exported.fileApplications(['C:/repo/a.js', 'C:/repo/b.js']);
+  assert.equal(calls.filter((entry) => entry[0] === 'apps').length, before);
+
+  assert.equal(await exported.openFilesWith(['C:/repo/a.js'], 'vscode'), true);
+  assert.equal(calls.at(-1)[0], 'open');
+  assert.equal(calls.at(-1)[1].path, 'C:/repo/a.js');
+  assert.equal(calls.at(-1)[1].application, 'vscode');
+});
+
+test('file open offers default-app and reveal fallbacks without handler enumeration', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const calls = [];
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async () => {
+      throw new Error('gateway/internal');
+    },
+    openWorkspacePath: async (request) => {
+      calls.push(request);
+      return { ok: true };
+    },
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  // 关联枚举整体失败：列表为 null，但桌面能力仍然可用。
+  assert.equal(await exported.fileApplications(['C:/repo/a.js']), null);
+  assert.equal(await exported.desktopReady(), true);
+
+  // 兜底不动用 application：默认程序打开、在文件管理器里显示。
+  assert.equal(await exported.openFilesDefault(['C:/repo/a.js']), true);
+  assert.equal(calls.at(-1).path, 'C:/repo/a.js');
+  assert.equal('application' in calls.at(-1), false);
+
+  assert.equal(await exported.revealFiles(['C:/repo/a.js', 'C:/repo/b.js']), true);
+  assert.equal(calls.at(-1).path, 'C:/repo/b.js');
+  assert.equal(calls.at(-1).action, 'reveal');
+});
+
+test('file open degrades to no handler when the host lacks the Remote', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  exported.apply(makeCtx());
+
+  assert.equal(await exported.fileApplications(['C:/repo/a.js']), null);
+  assert.equal(await exported.openFilesWith(['C:/repo/a.js'], 'vscode'), false);
+  assert.equal(await exported.desktopReady(), false);
+  assert.equal(await exported.openFilesDefault(['C:/repo/a.js']), false);
+  assert.equal(await exported.revealFiles(['C:/repo/a.js']), false);
+});
+
+test('a failed desktop capability probe is retried on the next attempt', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  let calls = 0;
+  const remote = {
+    canOpenWorkspacePath: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('offline');
+      return { ok: true, value: true };
+    },
+    workspacePathApplications: async () => ({ ok: true, value: [] }),
+    openWorkspacePath: async () => ({ ok: true }),
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  // 第一次探测失败只代表这一刻连不上，不能把「桌面不可用」永久缓存。
+  assert.equal(await exported.desktopReady(), false);
+  assert.equal(await exported.desktopReady(), true);
+  assert.equal(calls, 2);
 });
 
 test('header actions slot entries stay hidden until enabled', () => {

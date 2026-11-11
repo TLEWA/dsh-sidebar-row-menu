@@ -562,6 +562,10 @@ the row's existing menu.
   `bin\code.cmd` → `PATH`; if none is found it falls back to `rundll32` with
   `vscode://file/...`; a failed resolution is no longer cached forever, so the next
   click re-probes after VS Code is installed;
+- when `bin\code.cmd` is found, the sibling `Code.exe` is preferred so the launch
+  bypasses `cmd.exe`; only an explicit `DSH_SCM_VSCODE` pointing at a `.cmd`/`.bat`
+  keeps the cmd path, where `%VAR%` in the path is still expanded by cmd (Windows
+  directory names almost never contain `%`);
 - `DSH_SCM_VSCODE` must point to an existing file; a missing path now returns 500
   `vscode-launcher-missing` instead of silently falling back to another launcher;
 - spawn uses `detached + stdio:'ignore'` and deliberately does **not** set
@@ -666,7 +670,7 @@ Right-click menus are only one corner of DSH. These are the other plugins I main
 - **[dsh-sidebar-organizer](https://github.com/TLEWA/dsh-sidebar-organizer)** — a layout organizer for seven regions: sidebar, sidebar footer, conversation tabs, composer, session header, right panel, and settings navigation all support long-press drag to reorder, and panels can be tucked into "More".
 - **[dsh-better-choice](https://github.com/TLEWA/dsh-better-choice)** — an `ask_user_question` enhancement: right-click an option to add a note, or ask the model a side question with the same context before choosing.
 - **[dsh-if](https://github.com/TLEWA/dsh-if)** — the `/if` command: let the model judge a condition from prior context, then send the instruction below it as a user message only when it holds.
-- **[dsh-utf8-output](https://github.com/TLEWA/dsh-utf8-output)** — fixes GBK/CP936/CP932 mojibake from DSH subprocess output on Windows.
+- **[dsh-utf8-output](https://github.com/TLEWA/dsh-utf8-output)** — fixes GBK/CP936/GB18030 mojibake from DSH subprocess output on Windows.
 - **[dsh-opencode-go-router](https://github.com/TLEWA/dsh-opencode-go-router)** — rotates OpenCode Go routing after a context fold or a system-prompt rewrite, so less of the prompt cache is lost.
 - **[dsh-fastload](https://github.com/TLEWA/dsh-fastload)** — trims the first history page of long sessions while preserving the tail the user actually sees.
 - **[dsh-ptc-noargs](https://github.com/TLEWA/dsh-ptc-noargs)** — fixes rejected argument-less tool calls in PTC `run_code` by normalizing an omitted or `undefined` first argument to `{}`.

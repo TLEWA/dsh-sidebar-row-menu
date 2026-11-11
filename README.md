@@ -488,6 +488,9 @@ slot：先取槽位的直接子节点，再把子节点里的按钮（分段按�
   → `%LOCALAPPDATA%` / `%ProgramFiles%` 下的 `bin\code.cmd` → `PATH`；
   都找不到时退回 `rundll32` 打开 `vscode://file/...`；没找到启动器的结果不再永久缓存，
   装好 VS Code 后下一次点击会重新探测；
+- 命中 `bin\code.cmd` 时会优先改用同装的 `Code.exe` 直接启动，不再经过 `cmd.exe`；
+  只有 `DSH_SCM_VSCODE` 显式指向 `.cmd`/`.bat` 时才保留 cmd 路径，此时路径里的
+  `%VAR%` 仍会被 cmd 展开（Windows 目录名几乎不会出现 `%`）；
 - `DSH_SCM_VSCODE` 必须是已存在的文件；指向不存在的路径时直接返回 500
   `vscode-launcher-missing`，不会静默回退到别的启动器；
 - spawn 用 `detached + stdio:'ignore'`，不设 `windowsHide`（否则资源管理器窗口会被隐藏）；
@@ -571,7 +574,7 @@ DSH 升级若改动行组件或菜单定位实现：
 - **[dsh-sidebar-organizer](https://github.com/TLEWA/dsh-sidebar-organizer)** —— 七区域布局整理器：侧栏、侧栏底部、对话标签、输入框、会话头部、右侧栏、设置导航都能长按拖拽排序，面板可以收进「更多」再拖回来。
 - **[dsh-better-choice](https://github.com/TLEWA/dsh-better-choice)** —— `ask_user_question` 增强：右键选项补备注，选之前先拿同一份上下文旁问模型一句。
 - **[dsh-if](https://github.com/TLEWA/dsh-if)** —— `/if` 命令：让模型结合上文判断条件，成立才把下面的指令作为用户消息发出。
-- **[dsh-utf8-output](https://github.com/TLEWA/dsh-utf8-output)** —— 修复 Windows 下 DSH 子进程 GBK/CP936/CP932 输出乱码。
+- **[dsh-utf8-output](https://github.com/TLEWA/dsh-utf8-output)** —— 修复 Windows 下 DSH 子进程 GBK/CP936/GB18030 输出乱码。
 - **[dsh-opencode-go-router](https://github.com/TLEWA/dsh-opencode-go-router)** —— 上下文折叠或系统提示被重写后轮换 OpenCode Go 路由，少丢一点提示缓存。
 - **[dsh-fastload](https://github.com/TLEWA/dsh-fastload)** —— 长会话首屏历史瘦身：缩小首次打开时的历史页，同时保留用户实际看到的尾部内容。
 - **[dsh-ptc-noargs](https://github.com/TLEWA/dsh-ptc-noargs)** —— 修复 PTC `run_code` 中无参工具调用被拒绝的问题：把省略或 `undefined` 的首参归一化为 `{}`。

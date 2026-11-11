@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- **A session whose run state cannot be confirmed is no longer deleted on a guess.** When the `agents` service is unavailable the host used to treat the session as stopped and could delete a transcript that was still being written; it now reports the session as still running and keeps the log, and deletes only cold sessions that have no live handle at all.
+- **"Open in VS Code" no longer goes through `cmd.exe` by default.** When `code.cmd` is found the sibling `Code.exe` is launched directly, so a `%` in the path is not expanded as an environment variable; the cmd path is kept only for an explicit `DSH_SCM_VSCODE` pointing at a `.cmd`.
+- **Corrected the `dsh-utf8-output` blurb in the cross-plugin index:** `GBK/CP936/CP932` → `GBK/CP936/GB18030`, matching its actual UTF-8 + GB18030 decoders.
+
 ## 1.12.0 — 2026-11-11
 
 - Adopt shared Codex PR review rules and repository-specific review guidance; preserve existing CI, human approval, and release behavior.

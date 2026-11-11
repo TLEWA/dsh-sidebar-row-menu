@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- **"Open with" is no longer a dead end when the OS file associations cannot be read.** The host enumerates registered applications through PowerShell; a single broken Shell handler whose `GetName` throws makes the whole enumeration fail, and the submenu used to show only "The host offers no desktop opening here". It now falls back to "Open with the default application" and "Show in folder" (`openWorkspacePath` without an `application`, and `action: 'reveal'`), and explains why.
+
 ## [1.13.0] - 2026-11-11
 
 - **"Open with" in the conversation-body menu opens the file under the pointer, not the session workspace.** Right-clicking the changed-files card, a presented-file card, a message attachment or an @ file reference used to send the session directory to the pinned app and the "Open with" submenu; it now opens the file paths under the pointer (a row opens that row, blank card space opens the whole card), shows an "N files" note when several files are opened, and falls back to the session directory only when no absolute path can be resolved.

@@ -1,7 +1,7 @@
 import { appIcon, appLabel } from '../apps-catalog.js';
 import { MENU_ATTR, MORE_LABEL_RE, ORGANIZER_LAYOUT_KEY, ORGANIZER_MENU_ORDER_KEY } from '../constants.js';
 import { fiberOf } from '../dom.js';
-import { fileApplications, openFilesWith } from './file-open.js';
+import { desktopReady, fileApplications, openFilesDefault, openFilesWith, revealFiles } from './file-open.js';
 import { localeOf } from './workspace-menu.js';
 import { sessionCwd } from '../host-api.js';
 import { Fragment, IconChevronRightOutlineRegular, IconRightUpOutlineRegular, MenuItemButton, MenuSurface, createRoot, jsx, useEffect, useRef, useState } from '../platform.js';
@@ -298,6 +298,8 @@ function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
   const [open, setOpen] = useState(false);
   // 文件模式的应用列表：undefined = 读取中，null = 宿主不可用，数组 = 系统登记的程序。
   const [fileApps, setFileApps] = useState(undefined);
+  // 桌面打开能力：null = 还没探到，true / false = 探测结果。
+  const [fileDesktop, setFileDesktop] = useState(null);
   const hostRef = useRef(null);
   const { closeSoon, openNow } = useHoverSubmenu(setOpen, ensureApps);
 
@@ -318,6 +320,12 @@ function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
       if (alive) setFileApps(Array.isArray(list) ? list : null);
     }).catch(() => {
       if (alive) setFileApps(null);
+    });
+    // 关联列表读不出来时还要区分「宿主没有桌面能力」和「宿主读不到系统关联」。
+    desktopReady().then((ready) => {
+      if (alive) setFileDesktop(ready === true);
+    }).catch(() => {
+      if (alive) setFileDesktop(false);
     });
     return () => {
       alive = false;
@@ -348,6 +356,27 @@ function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
     });
   };
 
+  // 关联列表读不到时的兜底：默认程序打开、在文件管理器里显示，都不依赖枚举。
+  const openDefault = () => {
+    setOpen(false);
+    onClose();
+    openFilesDefault(fileMode ? filePaths : targets).then((ok) => {
+      if (!ok) toast(t('openFailed'));
+    }).catch(() => {
+      toast(t('openFailed'));
+    });
+  };
+
+  const reveal = () => {
+    setOpen(false);
+    onClose();
+    revealFiles(fileMode ? filePaths : targets).then((ok) => {
+      if (!ok) toast(t('openFailed'));
+    }).catch(() => {
+      toast(t('openFailed'));
+    });
+  };
+
   const pinnedIds = new Set(effectivePinned(apps.ids).filter((id) => childOn(id)));
   const enabledApps = apps.ids.filter((id) => childOn(id));
   const submenuApps = enabledApps.filter((id) => !pinnedIds.has(id));
@@ -365,7 +394,28 @@ function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
     if (fileApps === undefined) {
       panelBody = h('div', { className: 'dsrm-submenu-empty' }, t('settings.appsLoading'));
     } else if (fileApps === null) {
-      panelBody = h('div', { className: 'dsrm-submenu-empty' }, t('openWithUnavailable'));
+      // 宿主能打开桌面路径、但读不到系统登记的程序：给出不依赖枚举的两条动作。
+      if (fileDesktop === null) {
+        panelBody = h('div', { className: 'dsrm-submenu-empty' }, t('settings.appsLoading'));
+      } else if (fileDesktop) {
+        panelBody = h(Fragment, null,
+          jsx(MenuItemButton, {
+            key: 'default-app',
+            onSelect: openDefault,
+            icon: appIcon('filemanager'),
+            children: t('openDefaultApp'),
+          }),
+          jsx(MenuItemButton, {
+            key: 'reveal-files',
+            onSelect: reveal,
+            icon: appIcon('explorer'),
+            children: t('openWithReveal'),
+          }),
+          h('div', { className: 'dsrm-submenu-empty' }, t('openWithListFailed')),
+        );
+      } else {
+        panelBody = h('div', { className: 'dsrm-submenu-empty' }, t('openWithUnavailable'));
+      }
     } else if (fileSubmenu.length === 0) {
       panelBody = h('div', { className: 'dsrm-submenu-empty' },
         fileApps.length === 0 ? t('openWithNoHandlers') : t('settings.appsAllOff'));

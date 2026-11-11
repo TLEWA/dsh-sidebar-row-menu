@@ -66,4 +66,4 @@ export function apply(ctx) {
 export { closeMenu, closeToast };
 // 供测试使用：正文右键落点的文件解析与文件打开适配器。
 export { fileTargetAt } from './features/file-target.js';
-export { fileApplications, openFilesWith } from './features/file-open.js';
+export { desktopReady, fileApplications, openFilesDefault, openFilesWith, revealFiles } from './features/file-open.js';

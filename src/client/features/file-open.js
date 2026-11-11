@@ -142,6 +142,11 @@ async function fileApplications(paths, signal) {
   return apps;
 }
 
+/** 桌面打开能力是否可用；与 fileApplications 共用同一次探测，不额外发请求。 */
+function desktopReady() {
+  return probeDesktop();
+}
+
 /**
  * 用指定程序打开这些文件；全部成功才算成功。
  * @param {string[]} paths - 绝对路径。
@@ -169,4 +174,32 @@ async function openFilesWith(paths, application) {
   return results.every((ok) => ok === true);
 }
 
-export { fileApplications, openFilesWith };
+/** 用系统默认程序打开这些文件（不依赖关联列表，关联枚举失败时仍可用）。 */
+function openFilesDefault(paths) {
+  return openFilesWith(paths);
+}
+
+/**
+ * 在系统文件管理器里显示这些文件；只用到宿主 reveal 动作，不依赖关联列表。
+ * @param {string[]} paths - 绝对路径。
+ * @returns {Promise<boolean>} 全部成功才算成功。
+ */
+async function revealFiles(paths) {
+  const list = Array.isArray(paths)
+    ? paths.filter((path) => typeof path === 'string' && path !== '')
+    : [];
+  if (list.length === 0) return false;
+  const remote = remoteSession();
+  if (remote === null) return false;
+  const results = await Promise.all(list.map(async (path) => {
+    try {
+      const result = await remote.openWorkspacePath({ path, action: 'reveal' });
+      return result !== null && typeof result === 'object' && result.ok === true;
+    } catch {
+      return false;
+    }
+  }));
+  return results.every((ok) => ok === true);
+}
+
+export { desktopReady, fileApplications, openFilesDefault, openFilesWith, revealFiles };

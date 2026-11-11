@@ -1772,6 +1772,36 @@ test('file open uses Host Remote file handlers instead of the directory route', 
   assert.equal(calls.at(-1)[1].application, 'vscode');
 });
 
+test('file open offers default-app and reveal fallbacks without handler enumeration', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const calls = [];
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async () => {
+      throw new Error('gateway/internal');
+    },
+    openWorkspacePath: async (request) => {
+      calls.push(request);
+      return { ok: true };
+    },
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  // 关联枚举整体失败：列表为 null，但桌面能力仍然可用。
+  assert.equal(await exported.fileApplications(['C:/repo/a.js']), null);
+  assert.equal(await exported.desktopReady(), true);
+
+  // 兜底不动用 application：默认程序打开、在文件管理器里显示。
+  assert.equal(await exported.openFilesDefault(['C:/repo/a.js']), true);
+  assert.equal(calls.at(-1).path, 'C:/repo/a.js');
+  assert.equal('application' in calls.at(-1), false);
+
+  assert.equal(await exported.revealFiles(['C:/repo/a.js', 'C:/repo/b.js']), true);
+  assert.equal(calls.at(-1).path, 'C:/repo/b.js');
+  assert.equal(calls.at(-1).action, 'reveal');
+});
+
 test('file open degrades to no handler when the host lacks the Remote', async () => {
   const harness = loadClient();
   const exported = harness.registration.factory(makeRequire([], [], []));
@@ -1779,6 +1809,9 @@ test('file open degrades to no handler when the host lacks the Remote', async ()
 
   assert.equal(await exported.fileApplications(['C:/repo/a.js']), null);
   assert.equal(await exported.openFilesWith(['C:/repo/a.js'], 'vscode'), false);
+  assert.equal(await exported.desktopReady(), false);
+  assert.equal(await exported.openFilesDefault(['C:/repo/a.js']), false);
+  assert.equal(await exported.revealFiles(['C:/repo/a.js']), false);
 });
 
 test('header actions slot entries stay hidden until enabled', () => {

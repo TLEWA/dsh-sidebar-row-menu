@@ -17,6 +17,7 @@ import {
   resolveVscodeLauncher,
   toVscodeFileUrl,
 } from '../lib/index.js';
+import { preferVscodeExecutable } from '../lib/host/launch.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'dsh-row-menu-'));
 const existingFile = join(dir, 'a.txt');
@@ -251,6 +252,36 @@ test('resolveVscodeLauncher reports a broken override and recovers after it is f
   }
 });
 
+test('a sibling Code.exe wins over the code.cmd shim', () => {
+  const root = join(dir, 'vscode-install');
+  mkdirSync(join(root, 'bin'), { recursive: true });
+  const shim = join(root, 'bin', 'code.cmd');
+  const exe = join(root, 'Code.exe');
+  writeFileSync(shim, '@echo off\r\n');
+  writeFileSync(exe, 'not a real executable');
+
+  assert.equal(preferVscodeExecutable(shim), exe);
+  assert.equal(preferVscodeExecutable(join(dir, 'no-sibling', 'x.cmd')), null);
+  assert.equal(preferVscodeExecutable(exe), null, 'only cmd/bat shims get the sibling lookup');
+});
+
+test('only an explicit cmd/bat override keeps the cmd.exe path', () => {
+  const previous = process.env.DSH_SCM_VSCODE;
+  const shim = join(dir, 'explicit-code.cmd');
+  const exe = join(dir, 'explicit-code.exe');
+  writeFileSync(shim, '@echo off\r\n');
+  writeFileSync(exe, 'x');
+  try {
+    process.env.DSH_SCM_VSCODE = shim;
+    assert.deepEqual(resolveVscodeLauncher(), { command: shim, shell: true });
+    process.env.DSH_SCM_VSCODE = exe;
+    assert.deepEqual(resolveVscodeLauncher(), { command: exe, shell: false });
+  } finally {
+    if (previous === undefined) delete process.env.DSH_SCM_VSCODE;
+    else process.env.DSH_SCM_VSCODE = previous;
+  }
+});
+
 test('route survives a response whose socket is already closed', async () => {
   // Never reach the real file manager here: use the vscode target with a
   // non-executable fake launcher, so the route only attempts a spawn that
@@ -367,7 +398,8 @@ test('delete route detaches a live session before removing its transcript', asyn
   const sessionDir = seedSession('live-session');
   const calls = [];
   const live = { header: { id: 'live-session', cwd: dir } };
-  const { route } = createDeleteContext({ live, calls });
+  // A live view is not a running agent: the agents service must confirm it is stopped.
+  const { route } = createDeleteContext({ live, calls, agents: { get: () => ({ status: 'stopped' }) } });
   const result = await call(route, { url: DELETE_URL, body: { sessionIds: ['live-session'] } });
 
   assert.equal(result.status, 200);
@@ -492,6 +524,57 @@ test('a session that stays running after cancel is reported instead of deleted',
   assert.equal(result.body.error.includes('still running'), true);
   assert.equal(existsSync(sessionDir), true, 'a session that never stopped must keep its transcript');
   assert.deepEqual(calls.filter((entry) => entry[0] === 'emit'), []);
+});
+
+test('a live session is not deleted when the agents service is unavailable', async () => {
+  const sessionDir = seedSession('live-no-agents');
+  const calls = [];
+  const { route } = createDeleteContext({
+    live: { header: { id: 'live-no-agents', cwd: dir } },
+    headers: [{ id: 'live-no-agents', cwd: dir }],
+    calls,
+  });
+
+  const result = await call(route, { url: DELETE_URL, body: { sessionIds: ['live-no-agents'] } });
+
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, false);
+  assert.equal(result.body.deleted, 0);
+  assert.equal(result.body.error.includes('still running'), true);
+  assert.equal(existsSync(sessionDir), true, 'unknown liveness must not be treated as stopped');
+  assert.deepEqual(calls.filter((entry) => entry[0] === 'detachEntered'), []);
+});
+
+test('a live session is not deleted when querying the agents service throws', async () => {
+  const sessionDir = seedSession('live-agent-throws');
+  const calls = [];
+  const { route } = createDeleteContext({
+    live: { header: { id: 'live-agent-throws', cwd: dir } },
+    headers: [{ id: 'live-agent-throws', cwd: dir }],
+    calls,
+    agents: {
+      get() {
+        throw new Error('agents lookup exploded');
+      },
+    },
+  });
+
+  const result = await call(route, { url: DELETE_URL, body: { sessionIds: ['live-agent-throws'] } });
+
+  assert.equal(result.body.ok, false);
+  assert.equal(result.body.error.includes('still running'), true);
+  assert.equal(existsSync(sessionDir), true);
+});
+
+test('a cold session still deletes when the agents service is unavailable', async () => {
+  const sessionDir = seedSession('cold-no-agents');
+  const { route } = createDeleteContext({ headers: [{ id: 'cold-no-agents', cwd: dir }], calls: [] });
+
+  const result = await call(route, { url: DELETE_URL, body: { sessionIds: ['cold-no-agents'] } });
+
+  assert.equal(result.body.ok, true);
+  assert.equal(result.body.deleted, 1);
+  assert.equal(existsSync(sessionDir), false);
 });
 
 test('workspace delete route removes every session before dropping the workspace', async () => {

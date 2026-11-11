@@ -130,7 +130,11 @@ the original button's icon:
 - when the pointer is on a file card in the message body, "Open with" opens **those files**
   instead of the session directory: clicking one row of the changed-files card opens just that
   row, while clicking the card's blank space opens the whole card; presented-file cards,
-  message attachments and @ file references open their own paths too. Only when no absolute
+  message attachments and @ file references open their own paths too. For files the submenu
+  lists the applications the OS registered for that file (through the host Remote's
+  `workspacePathApplications` / `openWorkspacePath`, the same path DSH's own file menu uses),
+  never the directory catalogue and never the directory-only `open-in-app/open` route; a pinned
+  app becomes a top-level row only when it is also one of those handlers. Only when no absolute
   path can be resolved (e.g. an attachment that only carries a file name) does it fall back to
   the session directory, so an editor does not create an empty file; opening several files at
   once shows an "N files" note at the top of the menu;
@@ -261,7 +265,7 @@ https://github.com/TLEWA/dsh-sidebar-row-menu#v1.4.2
 Or install the tarball built by Actions directly, without Git:
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.4.2/dsh-sidebar-row-menu-1.4.2.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.13.0/dsh-sidebar-row-menu-1.13.0.tgz
 ```
 
 Equivalent command line:
@@ -609,8 +613,11 @@ the row's existing menu.
   and keeps the workspace, so no orphaned "Ungrouped" sessions are left behind;
 - an unknown workspace returns `ok:true, missing:true` and is not an error.
 
-"Open with" does not touch this plugin's host: it calls DSH's built-in
-`open-in-app/apps`, `open-in-app/open` and `open-in-app/icon/<id>` directly.
+"Open with" does not touch this plugin's host. The directory mode calls DSH's built-in
+`open-in-app/apps`, `open-in-app/open` and `open-in-app/icon/<id>` directly; the file mode in
+the conversation-body menu goes through the client Remote's
+`session.workspacePathApplications` / `session.openWorkspacePath` instead, because the host's
+`open-in-app/open` only accepts an existing directory and rejects files with 404.
 
 ## Compatibility
 

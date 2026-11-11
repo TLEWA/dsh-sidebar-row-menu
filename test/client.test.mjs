@@ -183,7 +183,7 @@ test('client module registers the expected factory and exports', () => {
   assert.equal(exported.name, 'sidebar-row-menu');
   assert.equal(typeof exported.apply, 'function');
   // The array lives in the vm realm, so compare by value rather than prototype.
-  assert.equal(exported.inject.join(','), 'locale,sessions,workspaces,slots');
+  assert.equal(exported.inject.join(','), 'locale,sessions,workspaces,slots,remote,remote.session');
   assert.equal(
     [...new Set(seen)].sort().join(','),
     [
@@ -1728,6 +1728,57 @@ test('file targets ignore skill chips and plain message text', () => {
 
   const plain = fakeNode({ text: '没有文件路径的普通正文' });
   assert.equal(exported.fileTargetAt(plain, 'C:/repo'), null);
+});
+
+
+test('file open uses Host Remote file handlers instead of the directory route', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const calls = [];
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      calls.push(['apps', path]);
+      return {
+        ok: true,
+        value: [
+          { id: 'vscode', name: 'Visual Studio Code', default: false, icon: 'data:image/png;base64,x' },
+          { id: 'notepad', name: 'Notepad', default: true, icon: null },
+        ],
+      };
+    },
+    openWorkspacePath: async (request) => {
+      calls.push(['open', request]);
+      return { ok: true };
+    },
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  const apps = await exported.fileApplications(['C:/repo/a.js', 'C:/repo/b.js']);
+  // vm 里创建的数组原型不同，取成主 realm 的数组再比较。
+  assert.deepEqual(Array.from(apps, (app) => app.id), ['vscode', 'notepad']);
+  assert.equal(apps[0].default, false);
+  assert.equal(apps[1].default, true);
+  assert.equal(apps[1].icon, '');
+
+  // 同一批文件第二次直接命中缓存，不再请求宿主。
+  const before = calls.filter((entry) => entry[0] === 'apps').length;
+  await exported.fileApplications(['C:/repo/a.js', 'C:/repo/b.js']);
+  assert.equal(calls.filter((entry) => entry[0] === 'apps').length, before);
+
+  assert.equal(await exported.openFilesWith(['C:/repo/a.js'], 'vscode'), true);
+  assert.equal(calls.at(-1)[0], 'open');
+  assert.equal(calls.at(-1)[1].path, 'C:/repo/a.js');
+  assert.equal(calls.at(-1)[1].application, 'vscode');
+});
+
+test('file open degrades to no handler when the host lacks the Remote', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  exported.apply(makeCtx());
+
+  assert.equal(await exported.fileApplications(['C:/repo/a.js']), null);
+  assert.equal(await exported.openFilesWith(['C:/repo/a.js'], 'vscode'), false);
 });
 
 test('header actions slot entries stay hidden until enabled', () => {

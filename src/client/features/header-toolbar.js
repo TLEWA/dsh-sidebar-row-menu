@@ -1,6 +1,7 @@
 import { appIcon, appLabel } from '../apps-catalog.js';
 import { MENU_ATTR, MORE_LABEL_RE, ORGANIZER_LAYOUT_KEY, ORGANIZER_MENU_ORDER_KEY } from '../constants.js';
 import { fiberOf } from '../dom.js';
+import { fileApplications, openFilesWith } from './file-open.js';
 import { localeOf } from './workspace-menu.js';
 import { sessionCwd } from '../host-api.js';
 import { Fragment, IconChevronRightOutlineRegular, IconRightUpOutlineRegular, MenuItemButton, MenuSurface, createRoot, jsx, useEffect, useRef, useState } from '../platform.js';
@@ -283,29 +284,64 @@ function selectedSessionId() {
 }
 
 /**
- * 空白菜单里的「打开方式」组：与原生工作区 / 会话右键同一套数据 ——
- * 置顶应用直接平铺，其余收进「打开方式」子菜单；开关、置顶与子项都在设置页配置。
+ * 空白菜单里的「打开方式」组。
+ *
+ * 指针落在文件卡片 / 文件引用上时走「文件模式」：列出系统为这些文件登记的
+ * 程序（Host Remote 的 workspacePathApplications），选中后直接打开这些文件；
+ * 否则沿用会话工作区目录，仍然使用宿主的目录应用目录 + open-in-app 路由。
+ * 置顶应用、开关与子项收在设置页配置，两种模式共用。
  */
 function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
   const apps = useApps();
   useChildren();
   usePinned();
   const [open, setOpen] = useState(false);
+  // 文件模式的应用列表：undefined = 读取中，null = 宿主不可用，数组 = 系统登记的程序。
+  const [fileApps, setFileApps] = useState(undefined);
   const hostRef = useRef(null);
   const { closeSoon, openNow } = useHoverSubmenu(setOpen, ensureApps);
 
   useSubmenuDismiss(open, setOpen, hostRef);
 
-  // 面板先隐藏挂载再量真实尺寸，位置按真实宽高算。
-  const box = useSubmenuPos(open, hostRef, [apps.status, apps.ids]);
-
   // 指针落在文件卡片 / 文件引用上时开那些文件；否则沿用会话工作区目录。
   const filePaths = Array.isArray(paths) ? paths.filter((path) => typeof path === 'string' && path !== '') : [];
-  const targets = filePaths.length > 0 ? filePaths : (typeof cwd === 'string' && cwd !== '' ? [cwd] : []);
+  const fileKey = filePaths.join('\u0000');
+  const fileMode = filePaths.length > 0;
+  const targets = fileMode ? filePaths : (typeof cwd === 'string' && cwd !== '' ? [cwd] : []);
+
+  useEffect(() => {
+    if (!fileMode) return undefined;
+    let alive = true;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    setFileApps(undefined);
+    fileApplications(filePaths, controller?.signal).then((list) => {
+      if (alive) setFileApps(Array.isArray(list) ? list : null);
+    }).catch(() => {
+      if (alive) setFileApps(null);
+    });
+    return () => {
+      alive = false;
+      if (controller !== null) controller.abort();
+    };
+  }, [fileKey, fileMode]);
+
+  // 面板先隐藏挂载再量真实尺寸，位置按真实宽高算；文件列表到达后行数会变，重新夹一次。
+  const appRows = fileMode
+    ? (fileApps === undefined ? -1 : (fileApps === null ? -2 : fileApps.length))
+    : 0;
+  const box = useSubmenuPos(open, hostRef, [apps.status, apps.ids, appRows]);
 
   const pick = (appId) => {
     setOpen(false);
     onClose();
+    if (fileMode) {
+      openFilesWith(targets, appId).then((ok) => {
+        if (!ok) toast(t('openFailed'));
+      }).catch(() => {
+        toast(t('openFailed'));
+      });
+      return;
+    }
     Promise.allSettled(targets.map((path) => openApplication(appId, path))).then((results) => {
       const failed = results.some((result) => result.status !== 'fulfilled' || result.value !== true);
       if (failed) toast(t('openFailed'));
@@ -316,8 +352,32 @@ function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
   const enabledApps = apps.ids.filter((id) => childOn(id));
   const submenuApps = enabledApps.filter((id) => !pinnedIds.has(id));
 
+  // 文件模式只列系统登记的程序：置顶的若恰好也在其中就平铺，其余进子菜单。
+  const filePinned = fileMode && Array.isArray(fileApps)
+    ? fileApps.filter((app) => pinnedIds.has(app.id))
+    : [];
+  const fileSubmenu = fileMode && Array.isArray(fileApps)
+    ? fileApps.filter((app) => !pinnedIds.has(app.id))
+    : [];
+
   let panelBody;
-  if (apps.status === 'error') {
+  if (fileMode) {
+    if (fileApps === undefined) {
+      panelBody = h('div', { className: 'dsrm-submenu-empty' }, t('settings.appsLoading'));
+    } else if (fileApps === null) {
+      panelBody = h('div', { className: 'dsrm-submenu-empty' }, t('openWithUnavailable'));
+    } else if (fileSubmenu.length === 0) {
+      panelBody = h('div', { className: 'dsrm-submenu-empty' },
+        fileApps.length === 0 ? t('openWithNoHandlers') : t('settings.appsAllOff'));
+    } else {
+      panelBody = fileSubmenu.map((app) => jsx(MenuItemButton, {
+        key: app.id,
+        onSelect: () => pick(app.id),
+        icon: fileAppIcon(app),
+        children: app.name !== '' ? app.name : appLabel(app.id, t),
+      }));
+    }
+  } else if (apps.status === 'error') {
     panelBody = h('div', { className: 'dsrm-submenu-empty' }, t('settings.appsError'));
   } else if (apps.ids.length === 0) {
     panelBody = h('div', { className: 'dsrm-submenu-empty' }, apps.status === 'loading' ? t('settings.appsLoading') : t('settings.appsUnavailable'));
@@ -332,17 +392,26 @@ function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
     }));
   }
 
+  const pinnedRows = fileMode
+    ? filePinned.map((app) => jsx(MenuItemButton, {
+      key: `pinned-${app.id}`,
+      onSelect: () => pick(app.id),
+      icon: fileAppIcon(app),
+      children: t('openWithApp', { name: app.name !== '' ? app.name : appLabel(app.id, t) }),
+    }))
+    : Array.from(pinnedIds).map((id) => jsx(MenuItemButton, {
+      key: `pinned-${id}`,
+      onSelect: () => pick(id),
+      icon: appIcon(id),
+      children: t('openWithApp', { name: appLabel(id, t) }),
+    }));
+
   return h(Fragment, null,
     separatorBefore ? h('div', { className: 'dsrm-sep', role: 'separator' }) : null,
     filePaths.length > 1
       ? h('div', { className: 'dsrm-openwith-note' }, t('openWithFiles', { count: String(filePaths.length) }))
       : null,
-    Array.from(pinnedIds).map((id) => jsx(MenuItemButton, {
-      key: `pinned-${id}`,
-      onSelect: () => pick(id),
-      icon: appIcon(id),
-      children: t('openWithApp', { name: appLabel(id, t) }),
-    })),
+    pinnedRows,
     h('div', {
       className: 'dsrm-openwith',
       ref: hostRef,
@@ -374,6 +443,15 @@ function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
     ),
   );
 }
+
+/** 文件关联自带的图标（系统给的是 data URL / 图片地址）；没有就退回目录应用图标。 */
+function fileAppIcon(app) {
+  if (app !== null && app !== undefined && typeof app.icon === 'string' && app.icon !== '') {
+    return jsx('img', { className: 'dsrm-app-icon', src: app.icon, alt: '' });
+  }
+  return appIcon(typeof app?.id === 'string' ? app.id : '');
+}
+
 
 /**
  * dsh-sidebar-organizer 把「更多操作」弹层的行序存在 localStorage 里（按行文字），
@@ -611,9 +689,11 @@ function HeaderToolbarMenu({ x, y, items, t, sessionId, fileTarget, onClose }) {
   const enabledApps = apps.ids.filter((id) => childOn(id));
   // 工具条上的 split「打开方式」只有在能拿到目标路径、且设置里开着时才接管；
   // 否则保留宿主的两个原按钮，菜单仍然是工具条的镜像。
+  // 文件目标不需要目录应用目录：系统登记的打开程序就够；只有退回目录模式时才要求
+  // 目录应用列表非空（否则那一组只会显示「宿主没有提供可用的外部应用」）。
   const ownOpenWith = itemsConfig.openWith !== false
     && targets.length > 0
-    && enabledApps.length > 0
+    && (filePaths.length > 0 || enabledApps.length > 0)
     && items.some((item) => item.openWith);
 
   const rows = [];

@@ -107,8 +107,11 @@ DSH 0.2.2 把侧栏右键改成数据驱动：工作区菜单由宿主统一渲�
   一组整体不出现；
 - 指针落在正文的文件卡片上时，「打开方式」打开的是**这些文件**，不是会话目录：「本轮变更
   文件」卡片点某一行只开那一行，点卡片空白处开整张卡片；交付文件卡片、消息附件和 @ 文件
-  引用同样按各自的路径打开。只有拿不到绝对路径时（例如附件只给了文件名）才退回会话目录，
-  避免编辑器凭空新建空文件；一次开多个文件时菜单顶部会标出「N 个文件」；
+  引用同样按各自的路径打开。文件模式下列出的是系统为该文件登记的打开程序（走宿主 Remote
+  的 `workspacePathApplications` / `openWorkspacePath`，与 DSH 自己的文件右键一致），
+  不再借用目录应用列表，也不经过只接受目录的 `open-in-app/open` 路由；置顶项只有同时
+  在系统关联里出现时才平铺到一级。只有拿不到绝对路径时（例如附件只给了文件名）才退回会话
+  目录，避免编辑器凭空新建空文件；一次开多个文件时菜单顶部会标出「N 个文件」；
 - 「更多操作」也不再点开右上角的「…」：和其它二级菜单一样在本菜单里展开，直接复刻
   宿主那份菜单的条目（复制会话为 Markdown、下载 Session 日志、反馈……），选中即执行；
   子菜单的行序同样跟随 `dsh-sidebar-organizer`——在「…」弹层里拖动过的顺序会写进
@@ -220,7 +223,7 @@ https://github.com/TLEWA/dsh-sidebar-row-menu#v1.4.2
 也可以直接安装 Actions 打出的压缩包（不经过 Git）：
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.4.2/dsh-sidebar-row-menu-1.4.2.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.13.0/dsh-sidebar-row-menu-1.13.0.tgz
 ```
 
 命令行等价写法：
@@ -522,8 +525,10 @@ slot：先取槽位的直接子节点，再把子节点里的按钮（分段按�
   任一会话失败返回 `200` + `ok:false` 并保留工作区，避免留下无人管理的「未分组」会话；
 - 未知工作区返回 `ok:true, missing:true`，不视为错误。
 
-「打开方式」不经过本插件宿主：直接调用 DSH 内置的 `open-in-app/apps`、
-`open-in-app/open`、`open-in-app/icon/<id>`。
+「打开方式」不经过本插件宿主：目录模式直接调用 DSH 内置的 `open-in-app/apps`、
+`open-in-app/open`、`open-in-app/icon/<id>`；正文文件模式改走客户端 Remote 的
+`session.workspacePathApplications` / `session.openWorkspacePath`（宿主的 `open-in-app/open`
+只接受已存在的目录，文件会被 404 拒绝）。
 
 ## 兼容性
 

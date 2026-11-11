@@ -24,7 +24,9 @@ import { registerSessionMenu } from './features/session-menu.js';
 import { registerSettings } from './features/settings.js';
 import { registerWorkspaceContextMenu } from './features/workspace-menu.js';
 
-export const inject = ['locale', 'sessions', 'workspaces', 'slots'];
+// remote / remote.session 供正文右键「打开方式」按文件调用 Host Remote：
+// Cordis 要求嵌套属性访问的每一层都出现在 inject 里，缺一层会抛错。
+export const inject = ['locale', 'sessions', 'workspaces', 'slots', 'remote', 'remote.session'];
 export const name = 'sidebar-row-menu';
 
 /**
@@ -62,5 +64,6 @@ export function apply(ctx) {
 
 // 供测试/调试用：确保 closeMenu/closeToast 在卸载时可达。
 export { closeMenu, closeToast };
-// 供测试使用：正文右键落点的文件解析。
+// 供测试使用：正文右键落点的文件解析与文件打开适配器。
 export { fileTargetAt } from './features/file-target.js';
+export { fileApplications, openFilesWith } from './features/file-open.js';

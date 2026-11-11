@@ -1,8 +1,9 @@
 # Changelog
 
-## [Unreleased]
+## [1.13.0] - 2026-11-11
 
 - **"Open with" in the conversation-body menu opens the file under the pointer, not the session workspace.** Right-clicking the changed-files card, a presented-file card, a message attachment or an @ file reference used to send the session directory to the pinned app and the "Open with" submenu; it now opens the file paths under the pointer (a row opens that row, blank card space opens the whole card), shows an "N files" note when several files are opened, and falls back to the session directory only when no absolute path can be resolved.
+- **File targets no longer go through the directory-only `open-in-app/open` route (fixes "Open failed: no handler found on the host").** The file mode now asks the client Remote: `session.workspacePathApplications` lists the applications the OS registered for the file, and `session.openWorkspacePath` opens it. The host route validates `isDirectory()` at the wire boundary, so posting a file always returned 404. A pinned app becomes a top-level row only when the same id appears among those handlers; the submenu shows the OS-provided names and icons.
 - **A session whose run state cannot be confirmed is no longer deleted on a guess.** When the `agents` service is unavailable the host used to treat the session as stopped and could delete a transcript that was still being written; it now reports the session as still running and keeps the log, and deletes only cold sessions that have no live handle at all.
 - **"Open in VS Code" no longer goes through `cmd.exe` by default.** When `code.cmd` is found the sibling `Code.exe` is launched directly, so a `%` in the path is not expanded as an environment variable; the cmd path is kept only for an explicit `DSH_SCM_VSCODE` pointing at a `.cmd`.
 - **Corrected the `dsh-utf8-output` blurb in the cross-plugin index:** `GBK/CP936/CP932` → `GBK/CP936/GB18030`, matching its actual UTF-8 + GB18030 decoders.

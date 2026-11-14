@@ -287,16 +287,19 @@ function peekFileApplications(paths) {
   return { apps: mergeAnswers(answers), stale };
 }
 
-/** 查询一个关联类；成功、失败都写缓存并 publish。 */
+/**
+ * 查询一个关联类；成功、失败都写缓存，但先不 publish。
+ *
+ * 通知必须等整批快照也写好后再发：宿主收到通知会立刻重新 peek，若这时批次
+ * 还是上一轮的旧结果，它会先渲染旧程序列表，而批次随后更新时又没有第二次
+ * 通知，菜单只能等下次右键才换新。
+ */
 async function loadFileClass(key, path, signal) {
   if (signal?.aborted) return null;
   const epoch = generation;
   const remote = remoteSession();
   if (remote === null || typeof remote.workspacePathApplications !== 'function') {
-    if (epoch === generation) {
-      remember(key, null);
-      publish();
-    }
+    if (epoch === generation) remember(key, null);
     return null;
   }
   try {
@@ -305,23 +308,20 @@ async function loadFileClass(key, path, signal) {
     const rows = applicationRows(result);
     if (rows === null) {
       remember(key, null);
-      publish();
       return null;
     }
     const apps = mergeHandlers([rows]);
     remember(key, apps);
-    publish();
     return apps;
   } catch {
     if (signal?.aborted || epoch !== generation) return null;
     remember(key, null);
-    publish();
     return null;
   }
 }
 
 /**
- * 后台拉取一批文件的关联程序；每个关联类一个请求，结果到达就 publish。
+ * 后台拉取一批文件的关联程序；每个关联类一个请求，整批落盘后再 publish。
  * 不设整体截止时间：晚到的答案正是宿主原地升级菜单所需要的。
  * @param {string[]} paths - 绝对路径。
  * @param {AbortSignal} [signal] - 旧自绘菜单卸载时取消。
@@ -363,7 +363,11 @@ async function refreshFileApplications(paths, signal) {
   // 整批都有确定答案（含「没有程序」）才记快照；中途取消的批次不留下半份结果。
   // 类缓存按容量淘汰后 cache.has 仍可能为 false，但成功返回的答案本身已经完整。
   const complete = answers.every((value, index) => value !== null || cache.has(classKeys[index]));
-  if (complete) rememberBatch(batchKey(list), merged);
+  if (complete) {
+    rememberBatch(batchKey(list), merged);
+    // 批次快照更新后再通知：宿主重解析时 peek 直接读到这一批的新答案。
+    publish();
+  }
   return merged;
 }
 

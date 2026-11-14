@@ -1068,6 +1068,73 @@ test('a hung handler enumeration never blocks the file menu or repeats requests'
   assert.equal(calls.join(','), 'C:/work/a.txt');
 });
 
+test('a refreshed file batch is visible to the notification that follows it', async () => {
+  let clock = 1_000;
+  const providers = [];
+  const calls = [];
+  const menus = {
+    register(spec) {
+      providers.push(spec);
+      return () => {};
+    },
+    open() {},
+  };
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      calls.push(path);
+      const name = calls.length === 1 ? 'Old App' : 'New App';
+      return { ok: true, value: [{ id: 'app', name, default: true, icon: null }] };
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+  const { registration, listeners, window, document, flushTimers } = loadClient({}, {
+    boot: { release: { version: '0.2.2-rc.3' } },
+    deferTimers: true,
+    now: () => clock,
+  });
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const exported = registration.factory(makeRequire([], [], []));
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+  exported.apply(makeCtx({ contextMenus: menus, remote: { session: remote } }));
+
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+  const provider = providers.find((spec) => spec.target === 'conversation');
+  const target = { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt'] };
+
+  // 首轮：兜底，后台枚举写入 Old App。
+  let actions = await provider.resolve(target, { aborted: false });
+  assert.equal(actions.at(-1).children[0].label, 'openDefaultApp');
+  flushTimers();
+  await new Promise((resolve) => setImmediate(resolve));
+  actions = await provider.resolve(target, { aborted: false });
+  assert.equal(actions.at(-1).children[0].label, 'Old App');
+
+  // 超过 60 秒后宿主重新解析：先给旧批次，同时排队换新。
+  clock += 61_000;
+  const store = provider.observe().at(-1);
+  const atNotification = [];
+  const unsubscribe = store.subscribe(() => {
+    atNotification.push(provider.resolve(target, { aborted: false }));
+  });
+  actions = await provider.resolve(target, { aborted: false });
+  assert.equal(actions.at(-1).children[0].label, 'Old App');
+  flushTimers();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(calls.length, 2);
+  assert.ok(atNotification.length > 0, 'the refreshed batch must notify the host');
+  // 通知到达时批次快照必须已经是 New App；否则宿主会读到旧批次且再也没有通知。
+  const latest = (await atNotification.at(-1)).at(-1);
+  assert.equal(latest.children[0].label, 'New App');
+  unsubscribe();
+});
+
 test('0.2.2-rc.1 keeps the painted conversation menu even with contextMenus', () => {
   const opened = [];
   const providers = [];

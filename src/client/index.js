@@ -19,6 +19,7 @@ import { closeToast } from './toast.js';
 import { installStyles } from './styles.js';
 import { startArchivedRows } from './features/archived.js';
 import { stopNativeConversationMenu } from './features/conversation-menu-native.js';
+import { resetFileApplications } from './features/file-open.js';
 import { registerDeleteDialog } from './features/delete-dialog.js';
 import { install } from './features/row-context.js';
 import { registerSessionMenu } from './features/session-menu.js';
@@ -36,6 +37,8 @@ export const name = 'sidebar-row-menu';
  */
 export function apply(ctx) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  // 同一模块可能被卸载后重新 apply：旧 Remote 的在途查询不能带进新上下文。
+  resetFileApplications();
   setRootCtx(ctx);
   if (typeof ctx.locale?.register === 'function') {
     ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'sidebar-row-menu: dictionaries');
@@ -58,6 +61,7 @@ export function apply(ctx) {
   if (ctx !== null && typeof ctx.effect === 'function') {
     ctx.effect(() => () => {
       setRootCtx(null);
+      resetFileApplications();
       stopSessionMenu?.();
       stopNativeConversationMenu();
       stopWorkspaceMenu();

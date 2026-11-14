@@ -12,6 +12,7 @@ function loadClient(stored = {}, options = {}) {
   const listeners = [];
   const hosts = [];
   const storage = new Map(Object.entries(stored));
+  const timers = [];
   const localStorage = {
     getItem: (key) => (storage.has(key) ? storage.get(key) : null),
     setItem: (key, value) => storage.set(key, String(value)),
@@ -40,7 +41,9 @@ function loadClient(stored = {}, options = {}) {
       if (index >= 0) listeners.splice(index, 1);
     },
     setTimeout: (fn) => {
-      if (options.runTimers === true && typeof fn === 'function') fn();
+      if (typeof fn !== 'function') return 0;
+      if (options.runTimers === true) fn();
+      else if (options.deferTimers === true) timers.push(fn);
       return 0;
     },
     clearTimeout: () => {},
@@ -75,6 +78,10 @@ function loadClient(stored = {}, options = {}) {
     console,
     URL,
     fetch: options.fetch,
+    // 可选假时钟：file-open 的 5 分钟缓存 / 60 秒刷新需要可推进的 Date.now。
+    ...(options.now === undefined
+      ? {}
+      : { Date: class extends Date { static now() { return options.now(); } } }),
     PointerEvent: class PointerEvent {
       constructor(type, init = {}) {
         this.type = type;
@@ -83,7 +90,10 @@ function loadClient(stored = {}, options = {}) {
     },
   });
   assert.ok(registration, 'client.js must call window.__ModuleLoader__.load');
-  return { registration, listeners, documentListeners, hosts, window, document, storage };
+  const flushTimers = () => {
+    for (const fn of timers.splice(0)) fn();
+  };
+  return { registration, listeners, documentListeners, hosts, window, document, storage, flushTimers };
 }
 
 function makeRequire(seen, roots, clipboard) {
@@ -890,7 +900,7 @@ test('0.2.2 conversation body right-click opens the native menu shell', async ()
   assert.equal(conversationProviders()[0].target, 'conversation');
   // 应用列表 / 置顶 / 工具条设置到达后宿主能重解析，占位行不会一直停在「加载中」。
   assert.equal(typeof conversationProviders()[0].observe, 'function');
-  assert.equal(conversationProviders()[0].observe().length, 5);
+  assert.equal(conversationProviders()[0].observe().length, 6);
   assert.equal(
     roots.some((entry) => entry.host.__element?.type?.name === 'HeaderToolbarMenu'),
     false,
@@ -918,15 +928,13 @@ test('0.2.2 native conversation menu restores toolbar icons and keeps open-with'
     canOpenWorkspacePath: async () => ({ ok: true, value: true }),
     workspacePathApplications: async ({ path }) => {
       calls.push(path);
-      return {
-        ok: true,
-        value: [{ id: 'vscode', name: 'Visual Studio Code', default: true, icon: '' }],
-      };
+      return { ok: true, value: [{ id: 'vscode', name: 'Visual Studio Code', default: true, icon: '' }] };
     },
-    openWorkspacePath: async () => ({ ok: true }),
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
   };
-  const { registration, listeners, window, document } = loadClient({}, {
+  const { registration, listeners, window, document, flushTimers } = loadClient({}, {
     boot: { release: { version: '0.2.2-rc.3' } },
+    deferTimers: true,
   });
   window.innerWidth = 1200;
   window.innerHeight = 800;
@@ -963,15 +971,168 @@ test('0.2.2 native conversation menu restores toolbar icons and keeps open-with'
   assert.equal(image.props.src, 'open-in-app/icon/vscode');
 
   // 文件模式仍按指针下的文件列程序，并在多文件时保留「N 个文件」提示。
-  const fileActions = await provider.resolve(
+  // 首次右键不再同步等关联请求：先出兜底项，后台结果到达后宿主原地重解析。
+  const fileStore = provider.observe().at(-1);
+  const revisionBefore = fileStore.getSnapshot();
+  let notified = 0;
+  const unsubscribe = fileStore.subscribe(() => {
+    notified += 1;
+  });
+  let fileActions = await provider.resolve(
     { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt', 'C:/work/b.txt'] },
     { aborted: false },
   );
-  const fileOpen = fileActions.at(-1);
+  let fileOpen = fileActions.at(-1);
   assert.equal(fileOpen.label, 'openWith');
   assert.equal(fileOpen.children[0].label, 'openWithFiles');
   assert.equal(fileOpen.children[0].disabled, true);
-  assert.equal(calls.join(','), 'C:/work/a.txt,C:/work/b.txt');
+  assert.equal(fileOpen.children[1].label, 'openDefaultApp');
+  assert.equal(fileOpen.children[2].label, 'openWithReveal');
+  assert.equal(calls.length, 0, 'the menu must not wait for the association request');
+
+  flushTimers();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(notified > 0, 'background result must notify the host store');
+  assert.ok(fileStore.getSnapshot() > revisionBefore);
+
+  fileActions = await provider.resolve(
+    { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt', 'C:/work/b.txt'] },
+    { aborted: false },
+  );
+  fileOpen = fileActions.at(-1);
+  assert.equal(fileOpen.children[1].label, 'Visual Studio Code');
+  // 同一个扩展名只查一次：系统按扩展名共享关联，多文件不应重复拉起枚举。
+  assert.equal(calls.join(','), 'C:/work/a.txt');
+
+  // 第二次解析命中 fresh cache，不再发请求，菜单也不会退回兜底行。
+  await provider.resolve(
+    { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt', 'C:/work/b.txt'] },
+    { aborted: false },
+  );
+  assert.equal(calls.join(','), 'C:/work/a.txt');
+  unsubscribe();
+});
+
+test('a hung handler enumeration never blocks the file menu or repeats requests', async () => {
+  const opened = [];
+  const providers = [];
+  const calls = [];
+  const menus = {
+    register(spec) {
+      providers.push(spec);
+      return () => {};
+    },
+    open(target, point) {
+      opened.push({ target, point });
+    },
+  };
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: ({ path }) => {
+      calls.push(path);
+      return new Promise(() => {});
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+  const { registration, listeners, window, document, flushTimers } = loadClient({}, {
+    boot: { release: { version: '0.2.2-rc.3' } },
+    deferTimers: true,
+  });
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+
+  exported.apply(makeCtx({ contextMenus: menus, remote: { session: remote } }));
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+  const provider = providers.find((spec) => spec.target === 'conversation');
+  const target = { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt', 'C:/work/b.txt'] };
+
+  const first = (await provider.resolve(target, { aborted: false })).at(-1);
+  const second = (await provider.resolve(target, { aborted: false })).at(-1);
+  assert.equal(calls.length, 0, 'a hung enumeration must not delay the first paint');
+  assert.equal(first.children[0].label, 'openWithFiles');
+  assert.equal(first.children[1].label, 'openDefaultApp');
+  assert.equal(second.children[1].label, 'openDefaultApp');
+
+  // 两次解析各排了一次后台刷新，但同一个关联类只允许一个在途请求。
+  flushTimers();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.join(','), 'C:/work/a.txt');
+  const third = (await provider.resolve(target, { aborted: false })).at(-1);
+  assert.equal(third.children[1].label, 'openDefaultApp');
+  assert.equal(calls.join(','), 'C:/work/a.txt');
+});
+
+test('a refreshed file batch is visible to the notification that follows it', async () => {
+  let clock = 1_000;
+  const providers = [];
+  const calls = [];
+  const menus = {
+    register(spec) {
+      providers.push(spec);
+      return () => {};
+    },
+    open() {},
+  };
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      calls.push(path);
+      const name = calls.length === 1 ? 'Old App' : 'New App';
+      return { ok: true, value: [{ id: 'app', name, default: true, icon: null }] };
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+  const { registration, listeners, window, document, flushTimers } = loadClient({}, {
+    boot: { release: { version: '0.2.2-rc.3' } },
+    deferTimers: true,
+    now: () => clock,
+  });
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const exported = registration.factory(makeRequire([], [], []));
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+  exported.apply(makeCtx({ contextMenus: menus, remote: { session: remote } }));
+
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+  const provider = providers.find((spec) => spec.target === 'conversation');
+  const target = { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt'] };
+
+  // 首轮：兜底，后台枚举写入 Old App。
+  let actions = await provider.resolve(target, { aborted: false });
+  assert.equal(actions.at(-1).children[0].label, 'openDefaultApp');
+  flushTimers();
+  await new Promise((resolve) => setImmediate(resolve));
+  actions = await provider.resolve(target, { aborted: false });
+  assert.equal(actions.at(-1).children[0].label, 'Old App');
+
+  // 超过 60 秒后宿主重新解析：先给旧批次，同时排队换新。
+  clock += 61_000;
+  const store = provider.observe().at(-1);
+  const atNotification = [];
+  const unsubscribe = store.subscribe(() => {
+    atNotification.push(provider.resolve(target, { aborted: false }));
+  });
+  actions = await provider.resolve(target, { aborted: false });
+  assert.equal(actions.at(-1).children[0].label, 'Old App');
+  flushTimers();
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(calls.length, 2);
+  assert.ok(atNotification.length > 0, 'the refreshed batch must notify the host');
+  // 通知到达时批次快照必须已经是 New App；否则宿主会读到旧批次且再也没有通知。
+  const latest = (await atNotification.at(-1)).at(-1);
+  assert.equal(latest.children[0].label, 'New App');
+  unsubscribe();
 });
 
 test('0.2.2-rc.1 keeps the painted conversation menu even with contextMenus', () => {
@@ -2016,7 +2177,7 @@ test('file open uses Host Remote file handlers instead of the directory route', 
     },
     openWorkspacePath: async (request) => {
       calls.push(['open', request]);
-      return { ok: true };
+      return { ok: true, value: { opened: true } };
     },
   };
   exported.apply(makeCtx({ remote: { session: remote } }));
@@ -2039,6 +2200,100 @@ test('file open uses Host Remote file handlers instead of the directory route', 
   assert.equal(calls.at(-1)[1].application, 'vscode');
 });
 
+test('file open refreshes a stale association cache instead of freezing it', async () => {
+  let clock = 1_000;
+  const harness = loadClient({}, { now: () => clock });
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const calls = [];
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      calls.push(path);
+      const id = calls.length === 1 ? 'vscode' : 'notepad';
+      return { ok: true, value: [{ id, name: id, default: true, icon: null }] };
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  const first = await exported.fileApplications(['C:/repo/a.js']);
+  assert.deepEqual(Array.from(first, (app) => app.id), ['vscode']);
+
+  // 超过 60 秒仍在 5 分钟 TTL 内：先返回旧结果，但必须后台换新。
+  clock += 61_000;
+  const second = await exported.fileApplications(['C:/repo/a.js']);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(Array.from(second, (app) => app.id), ['notepad']);
+});
+
+test('a file batch larger than the class cache is not re-enumerated in a loop', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const calls = [];
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      calls.push(path);
+      return { ok: true, value: [{ id: 'vscode', name: 'Visual Studio Code', default: true, icon: null }] };
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  // 无扩展名文件各自成类，65 个关联类超过 64 条类缓存；整批结果仍应命中。
+  const paths = Array.from({ length: 65 }, (_, index) => `C:/repo/file${index}`);
+  const first = await exported.fileApplications(paths);
+  assert.deepEqual(Array.from(first, (app) => app.id), ['vscode']);
+  assert.equal(calls.length, 65);
+
+  const second = await exported.fileApplications(paths);
+  assert.deepEqual(Array.from(second, (app) => app.id), ['vscode']);
+  assert.equal(calls.length, 65);
+});
+
+test('reapplying the plugin ignores in-flight association requests', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const oldCalls = [];
+  const newCalls = [];
+  let releaseOld;
+  const oldRemote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: ({ path }) => {
+      oldCalls.push(path);
+      return new Promise((resolve) => {
+        releaseOld = resolve;
+      });
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+  const newRemote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      newCalls.push(path);
+      return { ok: true, value: [{ id: 'vscode', name: 'Visual Studio Code', default: true, icon: null }] };
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+
+  exported.apply(makeCtx({ remote: { session: oldRemote } }));
+  const first = exported.fileApplications(['C:/repo/a.txt']);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(oldCalls.length, 1);
+
+  // 重新 apply 后必须换用新 Remote，而不是复用旧上下文里悬挂的同扩展名请求。
+  exported.apply(makeCtx({ remote: { session: newRemote } }));
+  const second = await exported.fileApplications(['C:/repo/a.txt']);
+  assert.deepEqual(Array.from(second, (app) => app.id), ['vscode']);
+  assert.equal(newCalls.length, 1);
+
+  releaseOld({ ok: true, value: [{ id: 'notepad', name: 'Notepad', default: true, icon: null }] });
+  assert.equal(await first, null);
+  const third = await exported.fileApplications(['C:/repo/a.txt']);
+  assert.deepEqual(Array.from(third, (app) => app.id), ['vscode']);
+  assert.equal(newCalls.length, 1);
+});
+
 test('file open offers default-app and reveal fallbacks without handler enumeration', async () => {
   const harness = loadClient();
   const exported = harness.registration.factory(makeRequire([], [], []));
@@ -2050,7 +2305,7 @@ test('file open offers default-app and reveal fallbacks without handler enumerat
     },
     openWorkspacePath: async (request) => {
       calls.push(request);
-      return { ok: true };
+      return { ok: true, value: { opened: true } };
     },
   };
   exported.apply(makeCtx({ remote: { session: remote } }));
@@ -2081,6 +2336,25 @@ test('file open degrades to no handler when the host lacks the Remote', async ()
   assert.equal(await exported.revealFiles(['C:/repo/a.js']), false);
 });
 
+test('file open accepts raw business values from older host bridges', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const remote = {
+    canOpenWorkspacePath: async () => true,
+    workspacePathApplications: async () => [
+      { id: 'vscode', name: 'Visual Studio Code', default: true, icon: null },
+    ],
+    openWorkspacePath: async () => ({ opened: true }),
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  assert.equal(await exported.desktopReady(), true);
+  const apps = await exported.fileApplications(['C:/repo/raw.raw']);
+  assert.deepEqual(Array.from(apps, (app) => app.id), ['vscode']);
+  assert.equal(await exported.openFilesWith(['C:/repo/raw.raw'], 'vscode'), true);
+  assert.equal(await exported.revealFiles(['C:/repo/raw.raw']), true);
+});
+
 test('a failed desktop capability probe is retried on the next attempt', async () => {
   const harness = loadClient();
   const exported = harness.registration.factory(makeRequire([], [], []));
@@ -2092,7 +2366,7 @@ test('a failed desktop capability probe is retried on the next attempt', async (
       return { ok: true, value: true };
     },
     workspacePathApplications: async () => ({ ok: true, value: [] }),
-    openWorkspacePath: async () => ({ ok: true }),
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
   };
   exported.apply(makeCtx({ remote: { session: remote } }));
 

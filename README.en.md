@@ -159,11 +159,18 @@ plugin's painted menu with its original icons and custom styling.
   path can be resolved (e.g. an attachment that only carries a file name) does it fall back to
   the session directory, so an editor does not create an empty file; opening several files at
   once shows an "N files" note at the top of the menu;
+- "Open with" no longer waits for OS enumeration: the first right-click immediately shows
+  "Open with the default application" and "Show in folder" fallbacks (the painted shell adds a
+  note as well), while associations load in the background. When the answer arrives the host
+  re-resolves the menu in place and replaces the fallbacks with the application list.
+  Associations are cached per extension for 5 minutes and refreshed in the background after
+  60 seconds; one extension issues one request, and a late answer is never dropped by a timeout;
 - when the host cannot read the OS file associations (for example one broken Shell handler makes
   the whole enumeration fail), the submenu does not dead-end: it offers "Open with the default
-  application" and "Show in folder" and says why. Those two call `openWorkspacePath` without an
-  `application` and `openWorkspacePath({ action: 'reveal' })` respectively, so they never touch
-  the association list and keep working when enumeration is broken;
+  application" and "Show in folder" (the painted shell adds a note). Those two call
+  `openWorkspacePath` without an `application` and `openWorkspacePath({ action: 'reveal' })`
+  respectively, so they never touch the association list and keep working when enumeration is
+  broken;
 - "More actions" no longer opens the header "…" popover: it expands in place like the
   other submenus and mirrors the host menu's entries (Copy session as Markdown, Download
   session log, Feedback, …), and picking one runs it immediately. Its row order follows

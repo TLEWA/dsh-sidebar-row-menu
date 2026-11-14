@@ -28,15 +28,19 @@ import {
   moreSelectHandler,
   moreSubmenuItems,
 } from './header-toolbar.js';
-import { desktopReady, fileApplications, openFilesDefault, openFilesWith, revealFiles } from './file-open.js';
+import {
+  fileApplicationsRevision,
+  openFilesDefault,
+  openFilesWith,
+  peekFileApplications,
+  refreshFileApplications,
+  revealFiles,
+  subscribeFileApplications,
+} from './file-open.js';
 
 const TARGET_KIND = 'conversation';
 /** 工具条图标不是应用图片：把按钮里的原生 SVG 原样搬进宿主菜单。 */
 const TOOLBAR_ICON_KEY = 'sidebar-row-menu.toolbar';
-/** 文件关联查询最多等这么久；宿主的单条贡献解析预算是 1000ms。 */
-const FILE_APPS_TIMEOUT = 700;
-/** 桌面能力探测已经做过一次时通常立即返回，给旧部署留一点请求时间。 */
-const DESKTOP_TIMEOUT = 250;
 
 /** 当前宿主菜单服务；null = 还没注册或此宿主没有该能力。 */
 let menus = null;
@@ -51,6 +55,11 @@ const itemsSource = { getSnapshot: itemsSnapshot, subscribe: subscribeItems };
 const childrenSource = { getSnapshot: childrenSnapshot, subscribe: subscribeChildren };
 const pinnedSource = { getSnapshot: pinnedSnapshot, subscribe: subscribePinned };
 const blankMenuSource = { getSnapshot: blankMenuSnapshot, subscribe: subscribeBlankMenu };
+// 文件关联在后台到达时发布版本号，宿主据此原地重解析，不必重新右键。
+const fileAppsSource = {
+  getSnapshot: fileApplicationsRevision,
+  subscribe: subscribeFileApplications,
+};
 
 function placeholder(t, key) {
   return { id: 'placeholder', label: t(key), disabled: true };
@@ -101,29 +110,6 @@ function fileAppLabel(app, t) {
   return typeof app?.name === 'string' && app.name !== '' ? app.name : appLabel(typeof app?.id === 'string' ? app.id : '', t);
 }
 
-/** 异步结果限时；超时先让菜单出来，不把整条贡献拖没。 */
-function within(promise, timeout, fallback) {
-  return new Promise((resolve) => {
-    let settled = false;
-    const timer = window.setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      resolve(fallback);
-    }, timeout);
-    Promise.resolve(promise).then((value) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timer);
-      resolve(value);
-    }).catch(() => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(timer);
-      resolve(fallback);
-    });
-  });
-}
-
 function clickAction(item) {
   return () => {
     window.setTimeout(() => {
@@ -136,79 +122,88 @@ function clickAction(item) {
   };
 }
 
+/** 文件模式的「打开方式」组：宿主只负责渲染，打开动作仍走 remote。 */
+function fileOpenResult(t, pinned, children) {
+  return {
+    pinned,
+    openWith: {
+      id: 'open-with',
+      label: t('openWith'),
+      icon: { key: 'sidebar-row-menu.open-with' },
+      children,
+    },
+  };
+}
+
+/** 关联列表查不到时的兜底：默认程序 + 文件管理器，不依赖枚举结果。 */
+function fileFallbackActions(paths, t) {
+  return [
+    {
+      id: 'default-app',
+      label: t('openDefaultApp'),
+      icon: appIcon('filemanager'),
+      run: async () => {
+        const ok = await openFilesDefault(paths);
+        if (!ok) throw new Error('open failed');
+      },
+      failureLabel: t('openFailed'),
+    },
+    {
+      id: 'reveal-files',
+      label: t('openWithReveal'),
+      icon: appIcon('explorer'),
+      run: async () => {
+        const ok = await revealFiles(paths);
+        if (!ok) throw new Error('reveal failed');
+      },
+      failureLabel: t('openFailed'),
+    },
+  ];
+}
+
+/** 后台查询放到下一个宏任务：宿主先拿到首帧，网络请求随后才开始。 */
+function scheduleFileAppsRefresh(paths) {
+  const run = () => refreshFileApplications(paths).catch(() => {});
+  if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+    window.setTimeout(run, 0);
+    return;
+  }
+  Promise.resolve().then(run);
+}
+
 /**
  * 「打开方式」的文件模式：列出系统为这些文件登记的程序。
- * 宿主解析贡献最多等 1000ms，所以这里只等 700ms；超时先显示加载占位，
- * 请求本身继续跑，下一次右键通常已经命中 file-open 的 30 秒缓存。
+ *
+ * 菜单解析不能同步等网络：缓存命中时直接给程序列表；未命中立即给默认程序 /
+ * 文件管理器兜底，后台 refreshFileApplications() 完成后通过 fileAppsSource
+ * 通知宿主原地重解析。Windows 首次枚举可能超过十秒，绝不能挡住菜单。
  */
-async function fileOpenWithActions(paths, t, signal) {
+function fileOpenWithActions(paths, t) {
   const apps = appsSnapshot();
   const pinnedIds = new Set(effectivePinned(apps.ids).filter((id) => childOn(id)));
-  const fileApps = await within(fileApplications(paths, signal), FILE_APPS_TIMEOUT, undefined);
+  const snapshot = peekFileApplications(paths);
 
-  if (fileApps === undefined) {
-    return {
-      pinned: [],
-      openWith: {
-        id: 'open-with',
-        label: t('openWith'),
-        icon: { key: 'sidebar-row-menu.open-with' },
-        children: [placeholder(t, 'settings.appsLoading')],
-      },
-    };
+  if (snapshot === undefined) {
+    // 第一次见这批文件：先给不必等关联枚举的兜底项，查询继续在后台跑。
+    scheduleFileAppsRefresh(paths);
+    return fileOpenResult(t, [], fileFallbackActions(paths, t));
   }
+  if (snapshot.stale) scheduleFileAppsRefresh(paths);
 
+  const fileApps = snapshot.apps;
   if (fileApps === null) {
-    const desktop = await within(desktopReady(), DESKTOP_TIMEOUT, null);
-    if (desktop === true) {
-      return {
-        pinned: [],
-        openWith: {
-          id: 'open-with',
-          label: t('openWith'),
-          icon: { key: 'sidebar-row-menu.open-with' },
-          children: [
-            {
-              id: 'default-app',
-              label: t('openDefaultApp'),
-              icon: appIcon('filemanager'),
-              run: async () => {
-                const ok = await openFilesDefault(paths);
-                if (!ok) throw new Error('open failed');
-              },
-              failureLabel: t('openFailed'),
-            },
-            {
-              id: 'reveal-files',
-              label: t('openWithReveal'),
-              icon: appIcon('explorer'),
-              run: async () => {
-                const ok = await revealFiles(paths);
-                if (!ok) throw new Error('reveal failed');
-              },
-              failureLabel: t('openFailed'),
-            },
-          ],
-        },
-      };
-    }
-    return {
-      pinned: [],
-      openWith: {
-        id: 'open-with',
-        label: t('openWith'),
-        icon: { key: 'sidebar-row-menu.open-with' },
-        children: [placeholder(t, desktop === false ? 'openWithUnavailable' : 'settings.appsLoading')],
-      },
-    };
+    // 没有桌面能力或查询失败：默认程序 / 文件管理器通常仍可用。
+    return fileOpenResult(t, [], fileFallbackActions(paths, t));
   }
 
   const enabled = fileApps.filter((app) => childOn(app.id));
   const pinnedApps = enabled.filter((app) => pinnedIds.has(app.id));
   const submenuApps = enabled.filter((app) => !pinnedIds.has(app.id));
   let children;
-  if (fileApps.length === 0) children = [placeholder(t, 'openWithNoHandlers')];
-  else if (submenuApps.length === 0) {
+  if (fileApps.length === 0) {
+    // 系统没有登记任何程序时，仍保留默认程序与文件管理器。
+    children = [...fileFallbackActions(paths, t), placeholder(t, 'openWithNoHandlers')];
+  } else if (submenuApps.length === 0) {
     // 文件模式没有单独的「全部关掉」文案；全部置顶时子菜单确实为空。
     children = [placeholder(t, enabled.length === 0 ? 'settings.appsAllOff' : 'openWithNoHandlers')];
   } else {
@@ -223,24 +218,16 @@ async function fileOpenWithActions(paths, t, signal) {
       failureLabel: t('openFailed'),
     }));
   }
-  return {
-    pinned: pinnedApps.map((app) => ({
-      id: `pinned-${app.id}`,
-      label: t('openWithApp', { name: fileAppLabel(app, t) }),
-      icon: fileAppIcon(app),
-      run: async () => {
-        const ok = await openFilesWith(paths, app.id);
-        if (!ok) throw new Error('open failed');
-      },
-      failureLabel: t('openFailed'),
-    })),
-    openWith: {
-      id: 'open-with',
-      label: t('openWith'),
-      icon: { key: 'sidebar-row-menu.open-with' },
-      children,
+  return fileOpenResult(t, pinnedApps.map((app) => ({
+    id: `pinned-${app.id}`,
+    label: t('openWithApp', { name: fileAppLabel(app, t) }),
+    icon: fileAppIcon(app),
+    run: async () => {
+      const ok = await openFilesWith(paths, app.id);
+      if (!ok) throw new Error('open failed');
     },
-  };
+    failureLabel: t('openFailed'),
+  })), children);
 }
 
 /** 「打开方式」的目录模式：宿主目录应用 + 置顶应用。 */
@@ -291,9 +278,9 @@ function directoryOpenWithActions(cwd, t) {
 }
 
 /** 生成「打开方式」组；文件模式按这些文件列程序，目录模式按会话目录列程序。 */
-async function openWithGroup(filePaths, cwd, t, signal) {
+async function openWithGroup(filePaths, cwd, t) {
   if (filePaths.length > 0) {
-    const group = await fileOpenWithActions(filePaths, t, signal);
+    const group = fileOpenWithActions(filePaths, t);
     // 自绘菜单把「N 个文件」提示放在打开方式面板顶部；原生菜单没有自由文本行，
     // 用一条禁用动作复刻，仍然放在子菜单第一行。
     if (group.openWith !== null && filePaths.length > 1 && Array.isArray(group.openWith.children)) {
@@ -312,10 +299,9 @@ async function openWithGroup(filePaths, cwd, t, signal) {
  * 把工具条镜像成宿主菜单动作。
  * @param ctx - 客户端根上下文。
  * @param target - 打开时捕获的 {sessionId,cwd,paths}。
- * @param signal - 宿主在菜单关闭 / 重解析时取消。
  * @returns 宿主可直接渲染的动作数组。
  */
-async function conversationActions(ctx, target, signal) {
+async function conversationActions(ctx, target) {
   const t = localeOf(ctx);
   const sessionId = typeof target?.sessionId === 'string' ? target.sessionId : '';
   const cwd = typeof target?.cwd === 'string' ? target.cwd : '';
@@ -330,7 +316,7 @@ async function conversationActions(ctx, target, signal) {
   const targets = filePaths.length > 0 ? filePaths : (cwd !== '' ? [cwd] : []);
   // 0.2.2 的会话头未必有「打开方式」分体按钮；rc.2 之前这是插件自己加的。
   // 原生菜单接管正文右键后，不能因为按钮缺失就把这个能力一起丢掉：只要
-  // 有文件或会话目录，就显式补一组打开方式（应用列表到达前先显示加载占位）。
+  // 有文件或会话目录，就显式补一组打开方式（应用列表到达前先显示默认程序兜底）。
   const hasOpenWithItem = items.some((item) => item.openWith);
   const canOpenWith = settings.openWith !== false && targets.length > 0;
 
@@ -348,7 +334,7 @@ async function conversationActions(ctx, target, signal) {
     openWithDone = true;
     let group;
     try {
-      group = await openWithGroup(filePaths, cwd, t, signal);
+      group = await openWithGroup(filePaths, cwd, t);
     } catch (error) {
       console.warn('[dsh-sidebar-row-menu] native open-with failed:', error);
       group = { pinned: [], openWith: null };
@@ -431,8 +417,8 @@ function ensureRegistered(ctx) {
       id: 'sidebar-row-menu.conversation',
       target: TARGET_KIND,
       order: 300,
-      observe: () => [itemsSource, childrenSource, pinnedSource, blankMenuSource, appsSource],
-      resolve: (target, signal) => conversationActions(ctx, target, signal),
+      observe: () => [itemsSource, childrenSource, pinnedSource, blankMenuSource, appsSource, fileAppsSource],
+      resolve: (target) => conversationActions(ctx, target),
     });
     menus = service;
     return true;

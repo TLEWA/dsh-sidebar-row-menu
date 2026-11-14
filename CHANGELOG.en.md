@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- **"Open with" no longer repeats the reason under its fallback actions when the OS file associations cannot be read.** The two usable actions, "Open with the default application" and "Show in folder", remain, but the small explanatory note beneath them is gone; the native body menu and the painted fallback menu match.
+
 ## 1.13.1 — 2026-11-14
 
 - **No more double ">" chevrons on submenu entries since 0.2.2-rc.2.** The host started drawing its own right-aligned chevron for submenu items in that release, while the plugin still added a fallback one for older hosts, so "Open with" and "Default permission for new sessions" showed two arrows side by side. The fallback chevron now renders only when the host does not draw one; 0.2.2-rc.1 and earlier still get the plugin's arrow.

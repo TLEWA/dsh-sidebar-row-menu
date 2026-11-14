@@ -6,16 +6,36 @@
  *   - `canOpenWorkspacePath()` 探测当前部署能否把路径交给桌面程序；
  *   - `workspacePathApplications({ path })` 列出该文件在系统里登记的打开程序；
  *   - `openWorkspacePath({ path, application })` 用其中一个程序打开这个文件。
- * 这些调用由 DSH 客户端远程层提供（与 dsh-better-sidebar 的 open-in-app 适配器同源），
- * 缺少 remote 的宿主退化为「没有可用程序」，而不是把文件 POST 到只收目录的路由。
+ * Client Remote 会把这些方法的结果包成 `{ ok: true, value }`（失败为
+ * `{ ok: false, error }`），与宿主服务端直接返回业务值不同，这里两种形状都认。
+ *
+ * 性能：Windows 的关联枚举要起 PowerShell、编译 C# 并调用 Shell COM，首次可能
+ * 超过十秒；菜单解析绝不能同步等它。调用方先用 peekFileApplications() 同步取
+ * 缓存，未命中就立即给兜底项，再在后台 refreshFileApplications()；结果到达后
+ * publish，宿主通过 observe 原地重解析，晚到的答案不会被超时丢掉。
+ *
+ * 缓存按「关联类」而不是完整路径区分（与宿主 open-in-app 一致）：系统按扩展名
+ * 查程序，所以同一目录下十个 .json 只查一次，重复右键直接命中。
  */
 
 import { rootCtx } from '../runtime.js';
 
-/** 关联列表缓存：同一批文件反复右键时直接呈现，不再逐个请求。 */
-const CACHE_TTL = 30 * 1000;
-const CACHE_MAX = 24;
+/** 关联列表缓存：同一扩展名反复右键时直接呈现，不再逐个请求。 */
+const CACHE_TTL = 5 * 60 * 1000;
+/** 超过这个年龄仍先给旧结果，同时在后台刷新，界面不会闪回兜底。 */
+const REFRESH_AFTER = 60 * 1000;
+/** 查询失败只记一小会儿，避免一次断连让菜单长时间显示不可用。 */
+const NEGATIVE_TTL = 3 * 1000;
+const CACHE_MAX = 64;
+/** 旧自绘菜单没有 observe 通道，只能等一小会儿；超时后后台请求继续跑。 */
+const LEGACY_WAIT_MS = 700;
+
+/** 关联类 key -> { at, apps }；apps 为 null 表示查询失败/桌面不可用。 */
 const cache = new Map();
+/** 同一关联类的并发请求共用一个 promise，避免重复拉起 PowerShell。 */
+const inflight = new Map();
+const listeners = new Set();
+let revision = 0;
 
 /** null = 还没探测；true / false = 探到过。 */
 let desktop = null;
@@ -32,7 +52,54 @@ function remoteSession() {
   }
 }
 
-/** 桌面打开能力只探测一次（每次页面重载一次）。 */
+/** 系统按扩展名查关联；无扩展名的文件（Makefile、.env）按完整路径单独成类。 */
+function associationKey(path) {
+  const name = path.slice(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
+  const dot = name.lastIndexOf('.');
+  return dot > 0 && dot < name.length - 1
+    ? `extension:${name.slice(dot).toLowerCase()}`
+    : `path:${path}`;
+}
+
+/** 一批路径按关联类去重，保留第一次出现的路径作为该类的代表。 */
+function classRepresentatives(list) {
+  const classes = new Map();
+  for (const path of list) {
+    const key = associationKey(path);
+    if (!classes.has(key)) classes.set(key, path);
+  }
+  return classes;
+}
+
+/**
+ * Client Remote 成功时是 `{ok:true,value}`；直接返回数组的宿主/测试桩也认。
+ * @returns {Array|null} null = 查询失败或形状不认识。
+ */
+function applicationRows(result) {
+  if (Array.isArray(result)) return result;
+  if (result !== null && typeof result === 'object' && result.ok === true) {
+    return Array.isArray(result.value) ? result.value : null;
+  }
+  return null;
+}
+
+/** 路径动作以 resolved 且未显式失败为成功；RemoteResult 失败会带 ok:false。 */
+function pathActionSucceeded(result) {
+  if (result === true) return true;
+  if (result === null || typeof result !== 'object') return false;
+  if (result.ok === false) return false;
+  if (result.ok === true) return true;
+  return result.opened === true || result.value !== undefined;
+}
+
+/** 桌面能力探测：Client Remote 返回 `{ok:true,value:boolean}`，兼容裸 boolean。 */
+function desktopAvailable(result) {
+  if (typeof result === 'boolean') return result;
+  if (result === null || typeof result !== 'object' || result.ok === false) return false;
+  return result.value === true || result.opened === true;
+}
+
+/** 桌面打开能力只探测一次（每次页面重载一次）；失败保持未知，下次再试。 */
 function probeDesktop() {
   if (desktop !== null) return Promise.resolve(desktop);
   const remote = remoteSession();
@@ -44,11 +111,10 @@ function probeDesktop() {
     desktopProbe = Promise.resolve()
       .then(() => remote.canOpenWorkspacePath())
       .then((result) => {
-        desktop = result !== null && typeof result === 'object' && result.ok === true && result.value === true;
+        desktop = desktopAvailable(result);
         return desktop;
       })
       .catch(() => {
-        // 探测抛错多半是临时断连：保持未知，下次右键再试，别让一次故障永久关掉文件打开。
         desktop = null;
         return false;
       })
@@ -88,16 +154,19 @@ function mergeHandlers(lists) {
   return order.map((id) => byId.get(id));
 }
 
-function cached(key) {
-  const hit = cache.get(key);
-  if (hit === undefined) return undefined;
-  if (Date.now() - hit.at > CACHE_TTL) {
-    cache.delete(key);
-    return undefined;
-  }
+function normalList(paths) {
+  return Array.isArray(paths)
+    ? paths.filter((path) => typeof path === 'string' && path !== '')
+    : [];
+}
+
+function ttlOf(hit) {
+  return hit.apps === null ? NEGATIVE_TTL : CACHE_TTL;
+}
+
+function touch(key, hit) {
   cache.delete(key);
   cache.set(key, hit);
-  return hit.apps;
 }
 
 function remember(key, apps) {
@@ -109,6 +178,148 @@ function remember(key, apps) {
   }
 }
 
+function publish() {
+  revision += 1;
+  for (const listener of [...listeners]) {
+    try {
+      listener();
+    } catch (error) {
+      console.warn('[dsh-sidebar-row-menu] file app listener failed:', error);
+    }
+  }
+}
+
+/** 版本号给 useSyncExternalStore 用；只增不减。 */
+function fileApplicationsRevision() {
+  return revision;
+}
+
+/** 订阅文件关联结果；后台刷新完成时宿主会收到通知。 */
+function subscribeFileApplications(listener) {
+  if (typeof listener !== 'function') return () => {};
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** 把一组关联类答案合成一个列表；全部失败返回 null。 */
+function mergeAnswers(answers) {
+  const usable = answers.filter((value) => value !== undefined);
+  if (usable.length === 0) return null;
+  if (usable.every((value) => value === null)) return null;
+  return mergeHandlers(usable);
+}
+
+/**
+ * 同步读缓存，给菜单解析用。
+ * @param {string[]} paths - 绝对路径。
+ * @returns {{apps:Array|null, stale:boolean}|undefined} undefined = 有类从没查过。
+ */
+function peekFileApplications(paths) {
+  const list = normalList(paths);
+  if (list.length === 0) return { apps: [], stale: false };
+  const classes = classRepresentatives(list);
+  const answers = [];
+  let stale = false;
+  for (const key of classes.keys()) {
+    const hit = cache.get(key);
+    if (hit === undefined) return undefined;
+    const age = Date.now() - hit.at;
+    if (age > ttlOf(hit)) {
+      cache.delete(key);
+      return undefined;
+    }
+    touch(key, hit);
+    if (age > REFRESH_AFTER) stale = true;
+    answers.push(hit.apps);
+  }
+  return { apps: mergeAnswers(answers), stale };
+}
+
+/** 查询一个关联类；成功、失败都写缓存并 publish。 */
+async function loadFileClass(key, path, signal) {
+  if (signal?.aborted) return null;
+  const remote = remoteSession();
+  if (remote === null || typeof remote.workspacePathApplications !== 'function') {
+    remember(key, null);
+    publish();
+    return null;
+  }
+  try {
+    const result = await remote.workspacePathApplications({ path }, signal);
+    if (signal?.aborted) return null;
+    const rows = applicationRows(result);
+    if (rows === null) {
+      remember(key, null);
+      publish();
+      return null;
+    }
+    const apps = mergeHandlers([rows]);
+    remember(key, apps);
+    publish();
+    return apps;
+  } catch {
+    if (signal?.aborted) return null;
+    remember(key, null);
+    publish();
+    return null;
+  }
+}
+
+/**
+ * 后台拉取一批文件的关联程序；每个关联类一个请求，结果到达就 publish。
+ * 不设整体截止时间：晚到的答案正是宿主原地升级菜单所需要的。
+ * @param {string[]} paths - 绝对路径。
+ * @param {AbortSignal} [signal] - 旧自绘菜单卸载时取消。
+ * @returns {Promise<Array|null>} null = 没有桌面能力或全部查询失败。
+ */
+async function refreshFileApplications(paths, signal) {
+  const list = normalList(paths);
+  if (list.length === 0) return [];
+  const classes = classRepresentatives(list);
+  const tasks = [];
+  for (const [key, path] of classes) {
+    const hit = cache.get(key);
+    const age = hit === undefined ? Infinity : Date.now() - hit.at;
+    // 过期要重查；未过期但已老于 REFRESH_AFTER 也要在后台换新，peek 的 stale
+    // 标记正是为此而设，不能在这里被 5 分钟 TTL 重新当成新鲜结果。
+    if (hit !== undefined && age <= ttlOf(hit) && age <= REFRESH_AFTER) {
+      touch(key, hit);
+      tasks.push(Promise.resolve(hit.apps));
+      continue;
+    }
+    const pending = inflight.get(key);
+    if (pending !== undefined) {
+      tasks.push(pending);
+      continue;
+    }
+    const task = loadFileClass(key, path, signal).finally(() => {
+      inflight.delete(key);
+    });
+    inflight.set(key, task);
+    tasks.push(task);
+  }
+  return mergeAnswers(await Promise.all(tasks));
+}
+
+/** 给旧自绘菜单一个有限等待；超时只放弃这次渲染，后台请求仍在跑。 */
+function waitAtMost(promise, ms, fallback) {
+  let timer = 0;
+  const deadline = new Promise((resolve) => {
+    if (typeof window === 'undefined' || typeof window.setTimeout !== 'function') {
+      resolve(fallback);
+      return;
+    }
+    timer = window.setTimeout(() => resolve(fallback), ms);
+  });
+  return Promise.race([promise, deadline]).finally(() => {
+    if (timer !== 0 && typeof window !== 'undefined' && typeof window.clearTimeout === 'function') {
+      window.clearTimeout(timer);
+    }
+  });
+}
+
 /**
  * 一批文件在系统里登记的程序。
  * @param {string[]} paths - 绝对路径。
@@ -117,30 +328,16 @@ function remember(key, apps) {
  *   null = 宿主没有桌面打开能力（或查询失败），[] = 系统没有登记任何程序。
  */
 async function fileApplications(paths, signal) {
-  const list = Array.isArray(paths)
-    ? paths.filter((path) => typeof path === 'string' && path !== '')
-    : [];
+  const list = normalList(paths);
   if (list.length === 0) return [];
-  const key = list.join('\u0000');
-  const hit = cached(key);
-  if (hit !== undefined) return hit;
-  if (!(await probeDesktop())) return null;
-  const remote = remoteSession();
-  if (remote === null || typeof remote.workspacePathApplications !== 'function') return null;
-  const answers = await Promise.all(list.map(async (path) => {
-    try {
-      const result = await remote.workspacePathApplications({ path }, signal);
-      if (result === null || typeof result !== 'object' || result.ok !== true) return null;
-      return Array.isArray(result.value) ? result.value : null;
-    } catch {
-      return null;
-    }
-  }));
-  const usable = answers.filter((value) => value !== null);
-  if (usable.length === 0) return null;
-  const apps = mergeHandlers(usable);
-  remember(key, apps);
-  return apps;
+  const snapshot = peekFileApplications(list);
+  if (snapshot !== undefined && !snapshot.stale) return snapshot.apps;
+  // 旧菜单没有 observe，只能等一个短预算；不把 signal 传给后台任务，
+  // 这样菜单关掉后枚举仍会完成并留下缓存，下次右键直接命中。
+  const pending = refreshFileApplications(list);
+  const result = await waitAtMost(pending, LEGACY_WAIT_MS, undefined);
+  if (result !== undefined) return result;
+  return snapshot === undefined ? null : snapshot.apps;
 }
 
 /** 桌面打开能力是否可用；与 fileApplications 共用同一次探测，不额外发请求。 */
@@ -155,9 +352,7 @@ function desktopReady() {
  * @returns {Promise<boolean>}
  */
 async function openFilesWith(paths, application) {
-  const list = Array.isArray(paths)
-    ? paths.filter((path) => typeof path === 'string' && path !== '')
-    : [];
+  const list = normalList(paths);
   if (list.length === 0) return false;
   const remote = remoteSession();
   if (remote === null) return false;
@@ -167,7 +362,7 @@ async function openFilesWith(paths, application) {
         ? { path, application }
         : { path };
       const result = await remote.openWorkspacePath(request);
-      return result !== null && typeof result === 'object' && result.ok === true;
+      return pathActionSucceeded(result);
     } catch {
       return false;
     }
@@ -186,16 +381,14 @@ function openFilesDefault(paths) {
  * @returns {Promise<boolean>} 全部成功才算成功。
  */
 async function revealFiles(paths) {
-  const list = Array.isArray(paths)
-    ? paths.filter((path) => typeof path === 'string' && path !== '')
-    : [];
+  const list = normalList(paths);
   if (list.length === 0) return false;
   const remote = remoteSession();
   if (remote === null) return false;
   const results = await Promise.all(list.map(async (path) => {
     try {
       const result = await remote.openWorkspacePath({ path, action: 'reveal' });
-      return result !== null && typeof result === 'object' && result.ok === true;
+      return pathActionSucceeded(result);
     } catch {
       return false;
     }
@@ -203,4 +396,14 @@ async function revealFiles(paths) {
   return results.every((ok) => ok === true);
 }
 
-export { desktopReady, fileApplications, openFilesDefault, openFilesWith, revealFiles };
+export {
+  desktopReady,
+  fileApplications,
+  fileApplicationsRevision,
+  openFilesDefault,
+  openFilesWith,
+  peekFileApplications,
+  refreshFileApplications,
+  revealFiles,
+  subscribeFileApplications,
+};

@@ -12,6 +12,7 @@ function loadClient(stored = {}, options = {}) {
   const listeners = [];
   const hosts = [];
   const storage = new Map(Object.entries(stored));
+  const timers = [];
   const localStorage = {
     getItem: (key) => (storage.has(key) ? storage.get(key) : null),
     setItem: (key, value) => storage.set(key, String(value)),
@@ -40,7 +41,9 @@ function loadClient(stored = {}, options = {}) {
       if (index >= 0) listeners.splice(index, 1);
     },
     setTimeout: (fn) => {
-      if (options.runTimers === true && typeof fn === 'function') fn();
+      if (typeof fn !== 'function') return 0;
+      if (options.runTimers === true) fn();
+      else if (options.deferTimers === true) timers.push(fn);
       return 0;
     },
     clearTimeout: () => {},
@@ -83,7 +86,10 @@ function loadClient(stored = {}, options = {}) {
     },
   });
   assert.ok(registration, 'client.js must call window.__ModuleLoader__.load');
-  return { registration, listeners, documentListeners, hosts, window, document, storage };
+  const flushTimers = () => {
+    for (const fn of timers.splice(0)) fn();
+  };
+  return { registration, listeners, documentListeners, hosts, window, document, storage, flushTimers };
 }
 
 function makeRequire(seen, roots, clipboard) {
@@ -890,7 +896,7 @@ test('0.2.2 conversation body right-click opens the native menu shell', async ()
   assert.equal(conversationProviders()[0].target, 'conversation');
   // 应用列表 / 置顶 / 工具条设置到达后宿主能重解析，占位行不会一直停在「加载中」。
   assert.equal(typeof conversationProviders()[0].observe, 'function');
-  assert.equal(conversationProviders()[0].observe().length, 5);
+  assert.equal(conversationProviders()[0].observe().length, 6);
   assert.equal(
     roots.some((entry) => entry.host.__element?.type?.name === 'HeaderToolbarMenu'),
     false,
@@ -918,15 +924,13 @@ test('0.2.2 native conversation menu restores toolbar icons and keeps open-with'
     canOpenWorkspacePath: async () => ({ ok: true, value: true }),
     workspacePathApplications: async ({ path }) => {
       calls.push(path);
-      return {
-        ok: true,
-        value: [{ id: 'vscode', name: 'Visual Studio Code', default: true, icon: '' }],
-      };
+      return { ok: true, value: [{ id: 'vscode', name: 'Visual Studio Code', default: true, icon: '' }] };
     },
-    openWorkspacePath: async () => ({ ok: true }),
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
   };
-  const { registration, listeners, window, document } = loadClient({}, {
+  const { registration, listeners, window, document, flushTimers } = loadClient({}, {
     boot: { release: { version: '0.2.2-rc.3' } },
+    deferTimers: true,
   });
   window.innerWidth = 1200;
   window.innerHeight = 800;
@@ -963,15 +967,101 @@ test('0.2.2 native conversation menu restores toolbar icons and keeps open-with'
   assert.equal(image.props.src, 'open-in-app/icon/vscode');
 
   // 文件模式仍按指针下的文件列程序，并在多文件时保留「N 个文件」提示。
-  const fileActions = await provider.resolve(
+  // 首次右键不再同步等关联请求：先出兜底项，后台结果到达后宿主原地重解析。
+  const fileStore = provider.observe().at(-1);
+  const revisionBefore = fileStore.getSnapshot();
+  let notified = 0;
+  const unsubscribe = fileStore.subscribe(() => {
+    notified += 1;
+  });
+  let fileActions = await provider.resolve(
     { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt', 'C:/work/b.txt'] },
     { aborted: false },
   );
-  const fileOpen = fileActions.at(-1);
+  let fileOpen = fileActions.at(-1);
   assert.equal(fileOpen.label, 'openWith');
   assert.equal(fileOpen.children[0].label, 'openWithFiles');
   assert.equal(fileOpen.children[0].disabled, true);
-  assert.equal(calls.join(','), 'C:/work/a.txt,C:/work/b.txt');
+  assert.equal(fileOpen.children[1].label, 'openDefaultApp');
+  assert.equal(fileOpen.children[2].label, 'openWithReveal');
+  assert.equal(calls.length, 0, 'the menu must not wait for the association request');
+
+  flushTimers();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(notified > 0, 'background result must notify the host store');
+  assert.ok(fileStore.getSnapshot() > revisionBefore);
+
+  fileActions = await provider.resolve(
+    { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt', 'C:/work/b.txt'] },
+    { aborted: false },
+  );
+  fileOpen = fileActions.at(-1);
+  assert.equal(fileOpen.children[1].label, 'Visual Studio Code');
+  // 同一个扩展名只查一次：系统按扩展名共享关联，多文件不应重复拉起枚举。
+  assert.equal(calls.join(','), 'C:/work/a.txt');
+
+  // 第二次解析命中 fresh cache，不再发请求，菜单也不会退回兜底行。
+  await provider.resolve(
+    { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt', 'C:/work/b.txt'] },
+    { aborted: false },
+  );
+  assert.equal(calls.join(','), 'C:/work/a.txt');
+  unsubscribe();
+});
+
+test('a hung handler enumeration never blocks the file menu or repeats requests', async () => {
+  const opened = [];
+  const providers = [];
+  const calls = [];
+  const menus = {
+    register(spec) {
+      providers.push(spec);
+      return () => {};
+    },
+    open(target, point) {
+      opened.push({ target, point });
+    },
+  };
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: ({ path }) => {
+      calls.push(path);
+      return new Promise(() => {});
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+  const { registration, listeners, window, document, flushTimers } = loadClient({}, {
+    boot: { release: { version: '0.2.2-rc.3' } },
+    deferTimers: true,
+  });
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+
+  exported.apply(makeCtx({ contextMenus: menus, remote: { session: remote } }));
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+  const provider = providers.find((spec) => spec.target === 'conversation');
+  const target = { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt', 'C:/work/b.txt'] };
+
+  const first = (await provider.resolve(target, { aborted: false })).at(-1);
+  const second = (await provider.resolve(target, { aborted: false })).at(-1);
+  assert.equal(calls.length, 0, 'a hung enumeration must not delay the first paint');
+  assert.equal(first.children[0].label, 'openWithFiles');
+  assert.equal(first.children[1].label, 'openDefaultApp');
+  assert.equal(second.children[1].label, 'openDefaultApp');
+
+  // 两次解析各排了一次后台刷新，但同一个关联类只允许一个在途请求。
+  flushTimers();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(calls.join(','), 'C:/work/a.txt');
+  const third = (await provider.resolve(target, { aborted: false })).at(-1);
+  assert.equal(third.children[1].label, 'openDefaultApp');
+  assert.equal(calls.join(','), 'C:/work/a.txt');
 });
 
 test('0.2.2-rc.1 keeps the painted conversation menu even with contextMenus', () => {
@@ -2016,7 +2106,7 @@ test('file open uses Host Remote file handlers instead of the directory route', 
     },
     openWorkspacePath: async (request) => {
       calls.push(['open', request]);
-      return { ok: true };
+      return { ok: true, value: { opened: true } };
     },
   };
   exported.apply(makeCtx({ remote: { session: remote } }));
@@ -2050,7 +2140,7 @@ test('file open offers default-app and reveal fallbacks without handler enumerat
     },
     openWorkspacePath: async (request) => {
       calls.push(request);
-      return { ok: true };
+      return { ok: true, value: { opened: true } };
     },
   };
   exported.apply(makeCtx({ remote: { session: remote } }));
@@ -2081,6 +2171,25 @@ test('file open degrades to no handler when the host lacks the Remote', async ()
   assert.equal(await exported.revealFiles(['C:/repo/a.js']), false);
 });
 
+test('file open accepts raw business values from older host bridges', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const remote = {
+    canOpenWorkspacePath: async () => true,
+    workspacePathApplications: async () => [
+      { id: 'vscode', name: 'Visual Studio Code', default: true, icon: null },
+    ],
+    openWorkspacePath: async () => ({ opened: true }),
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  assert.equal(await exported.desktopReady(), true);
+  const apps = await exported.fileApplications(['C:/repo/raw.raw']);
+  assert.deepEqual(Array.from(apps, (app) => app.id), ['vscode']);
+  assert.equal(await exported.openFilesWith(['C:/repo/raw.raw'], 'vscode'), true);
+  assert.equal(await exported.revealFiles(['C:/repo/raw.raw']), true);
+});
+
 test('a failed desktop capability probe is retried on the next attempt', async () => {
   const harness = loadClient();
   const exported = harness.registration.factory(makeRequire([], [], []));
@@ -2092,7 +2201,7 @@ test('a failed desktop capability probe is retried on the next attempt', async (
       return { ok: true, value: true };
     },
     workspacePathApplications: async () => ({ ok: true, value: [] }),
-    openWorkspacePath: async () => ({ ok: true }),
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
   };
   exported.apply(makeCtx({ remote: { session: remote } }));
 

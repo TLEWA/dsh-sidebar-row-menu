@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- **File "Open with" no longer waits for OS association enumeration.** The first Windows enumeration may start PowerShell, compile C# and call Shell COM, sometimes for more than ten seconds. The first right-click now immediately shows "Open with the default application" and "Show in folder" while associations load in the background; when the answer arrives the host re-resolves the menu in place and replaces the fallbacks with the application list. Associations are cached per extension for 5 minutes and refreshed in the background after 60 seconds; one extension issues one request, and a late answer is never dropped by a timeout.
+- **Fixed Host Remote result-shape handling.** The client Remote wraps results as `{ ok: true, value }`; the old code only accepted one shape, so a normal handler array could be treated as a failure and cached as such. It now accepts `{ ok: true, value }`, a bare array, a bare boolean and `{ opened: true }`, and the success checks for opening and "Show in folder" use the same rule.
 - **"Open with" no longer repeats the reason under its fallback actions when the OS file associations cannot be read.** The two usable actions, "Open with the default application" and "Show in folder", remain, but the small explanatory note beneath them is gone; the native body menu and the painted fallback menu match.
 
 ## 1.13.1 — 2026-11-14

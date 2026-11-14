@@ -411,7 +411,6 @@ function BlankOpenWithRows({ t, cwd, paths, separatorBefore, onClose }) {
             icon: appIcon('explorer'),
             children: t('openWithReveal'),
           }),
-          h('div', { className: 'dsrm-submenu-empty' }, t('openWithListFailed')),
         );
       } else {
         panelBody = h('div', { className: 'dsrm-submenu-empty' }, t('openWithUnavailable'));

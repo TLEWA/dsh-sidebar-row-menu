@@ -188,7 +188,6 @@ async function fileOpenWithActions(paths, t, signal) {
               },
               failureLabel: t('openFailed'),
             },
-            placeholder(t, 'openWithListFailed'),
           ],
         },
       };

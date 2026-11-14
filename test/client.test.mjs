@@ -43,6 +43,7 @@ function loadClient(stored = {}, options = {}) {
       if (options.runTimers === true && typeof fn === 'function') fn();
       return 0;
     },
+    clearTimeout: () => {},
   };
   const documentListeners = [];
   const document = {
@@ -900,6 +901,79 @@ test('0.2.2 conversation body right-click opens the native menu shell', async ()
   assert.equal(actions.map((action) => action.label).join(','), '查找');
 });
 
+test('0.2.2 native conversation menu restores toolbar icons and keeps open-with', async () => {
+  const opened = [];
+  const providers = [];
+  const menus = {
+    register(spec) {
+      providers.push(spec);
+      return () => {};
+    },
+    open(target, point) {
+      opened.push({ target, point });
+    },
+  };
+  const calls = [];
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      calls.push(path);
+      return {
+        ok: true,
+        value: [{ id: 'vscode', name: 'Visual Studio Code', default: true, icon: '' }],
+      };
+    },
+    openWorkspacePath: async () => ({ ok: true }),
+  };
+  const { registration, listeners, window, document } = loadClient({}, {
+    boot: { release: { version: '0.2.2-rc.3' } },
+  });
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const find = makeToolbarButton('查找', 646, {
+    iconHtml: '<svg width="14" height="14"><use href="#find"/></svg>',
+  });
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+
+  const ctx = makeCtx({ contextMenus: menus, remote: { session: remote } });
+  exported.apply(ctx);
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+
+  const provider = providers.find((spec) => spec.target === 'conversation');
+  const actions = await provider.resolve({ sessionId: 's1', cwd: 'C:/work', paths: [] }, { aborted: false });
+  assert.equal(actions.map((action) => action.label).join(','), '查找,openWith');
+  assert.equal(actions[0].icon.key, 'sidebar-row-menu.toolbar');
+  assert.ok(actions[0].icon.html.includes('<svg'), 'toolbar glyphs must be carried into the host menu');
+
+  // 图标通过宿主 keyed slot 渲染：HTML 走 span，图片地址走 img。
+  const iconRegistration = ctx.slots.registrations.find(
+    (entry) => entry.spec.name === 'contextMenu.icon' && entry.spec.key === 'sidebar-row-menu.toolbar',
+  );
+  assert.ok(iconRegistration, 'the contextMenu.icon slot must be registered');
+  const glyph = iconRegistration.Component({ icon: { html: '<svg width="14"></svg>' } });
+  assert.equal(glyph.type, 'span');
+  assert.equal(glyph.props.className, 'dsrm-header-icon');
+  assert.equal(glyph.props.dangerouslySetInnerHTML.__html, '<svg width="14"></svg>');
+  const image = iconRegistration.Component({ icon: { src: 'open-in-app/icon/vscode' } });
+  assert.equal(image.type, 'img');
+  assert.equal(image.props.src, 'open-in-app/icon/vscode');
+
+  // 文件模式仍按指针下的文件列程序，并在多文件时保留「N 个文件」提示。
+  const fileActions = await provider.resolve(
+    { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt', 'C:/work/b.txt'] },
+    { aborted: false },
+  );
+  const fileOpen = fileActions.at(-1);
+  assert.equal(fileOpen.label, 'openWith');
+  assert.equal(fileOpen.children[0].label, 'openWithFiles');
+  assert.equal(fileOpen.children[0].disabled, true);
+  assert.equal(calls.join(','), 'C:/work/a.txt,C:/work/b.txt');
+});
+
 test('0.2.2-rc.1 keeps the painted conversation menu even with contextMenus', () => {
   const opened = [];
   const providers = [];
@@ -1535,7 +1609,10 @@ function makeToolbarButton(label, left, options = {}) {
     matches(selector) {
       return String(selector).startsWith('button');
     },
-    querySelector() {
+    querySelector(selector) {
+      if (selector === 'svg' && typeof options.iconHtml === 'string') {
+        return { outerHTML: options.iconHtml };
+      }
       return null;
     },
     querySelectorAll() {

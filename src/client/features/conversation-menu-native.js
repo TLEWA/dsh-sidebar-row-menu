@@ -13,13 +13,13 @@
 import { appLabel } from '../apps-catalog.js';
 import { ICON_ROUTE } from '../constants.js';
 import { hasNativeSessionMenu } from '../host-version.js';
+import { jsx } from '../platform.js';
 import { sessionCwd } from '../host-api.js';
 import { localeOf } from '../runtime.js';
 import { blankMenuSnapshot, blankOption, subscribeBlankMenu } from '../store/blank-menu.js';
 import { childOn, childrenSnapshot, subscribeChildren } from '../store/children.js';
 import { itemsSnapshot, subscribeItems } from '../store/items.js';
 import { effectivePinned, pinnedSnapshot, subscribePinned } from '../store/pinned.js';
-import { toast } from '../toast.js';
 import { appsSnapshot, ensureApps, openApplication } from '../store/apps.js';
 import { appsSource, contextMenusOf } from './context-menu-shared.js';
 import {
@@ -31,6 +31,8 @@ import {
 import { desktopReady, fileApplications, openFilesDefault, openFilesWith, revealFiles } from './file-open.js';
 
 const TARGET_KIND = 'conversation';
+/** 工具条图标不是应用图片：把按钮里的原生 SVG 原样搬进宿主菜单。 */
+const TOOLBAR_ICON_KEY = 'sidebar-row-menu.toolbar';
 /** 文件关联查询最多等这么久；宿主的单条贡献解析预算是 1000ms。 */
 const FILE_APPS_TIMEOUT = 700;
 /** 桌面能力探测已经做过一次时通常立即返回，给旧部署留一点请求时间。 */
@@ -40,6 +42,8 @@ const DESKTOP_TIMEOUT = 250;
 let menus = null;
 /** 注册返回的撤销函数。 */
 let unregister = null;
+/** contextMenu.icon 槽的注册撤销函数。 */
+let iconRegistration = null;
 
 // 菜单打开后应用列表 / 置顶 / 工具条设置仍可能变化；交给宿主订阅，
 // 数据到达时宿主会重解析整份贡献，占位行就能换成真实应用。
@@ -50,6 +54,38 @@ const blankMenuSource = { getSnapshot: blankMenuSnapshot, subscribe: subscribeBl
 
 function placeholder(t, key) {
   return { id: 'placeholder', label: t(key), disabled: true };
+}
+
+function toolbarIcon(icon) {
+  if (icon === null || icon === undefined) return undefined;
+  if (typeof icon.html === 'string' && icon.html.trim().startsWith('<svg')) {
+    return { key: TOOLBAR_ICON_KEY, html: icon.html };
+  }
+  if (typeof icon.src === 'string' && icon.src !== '') {
+    return { key: TOOLBAR_ICON_KEY, src: icon.src };
+  }
+  return undefined;
+}
+
+/**
+ * 宿主 contextMenu.icon 槽的渲染器。
+ *
+ * 工具条按钮的图标来自宿主自己的 DOM（headerButtonIcon 抄成 outerHTML），
+ * 宿主菜单只接受 {key,src} 这种可序列化的描述，所以这里用插件注册的 key
+ * 把同一段 SVG 放回去；图片按钮继续走 src。
+ */
+function ContextMenuToolbarIcon({ icon }) {
+  const html = typeof icon?.html === 'string' ? icon.html.trim() : '';
+  if (html.startsWith('<svg')) {
+    return jsx('span', {
+      className: 'dsrm-header-icon',
+      'aria-hidden': 'true',
+      dangerouslySetInnerHTML: { __html: html },
+    });
+  }
+  const src = typeof icon?.src === 'string' ? icon.src : '';
+  if (src !== '') return jsx('img', { className: 'dsrm-header-icon-img', src, alt: '' });
+  return null;
 }
 
 function appIcon(appId) {
@@ -69,7 +105,7 @@ function fileAppLabel(app, t) {
 function within(promise, timeout, fallback) {
   return new Promise((resolve) => {
     let settled = false;
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       if (settled) return;
       settled = true;
       resolve(fallback);
@@ -77,12 +113,12 @@ function within(promise, timeout, fallback) {
     Promise.resolve(promise).then((value) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      window.clearTimeout(timer);
       resolve(value);
     }).catch(() => {
       if (settled) return;
       settled = true;
-      clearTimeout(timer);
+      window.clearTimeout(timer);
       resolve(fallback);
     });
   });
@@ -255,6 +291,24 @@ function directoryOpenWithActions(cwd, t) {
   };
 }
 
+/** 生成「打开方式」组；文件模式按这些文件列程序，目录模式按会话目录列程序。 */
+async function openWithGroup(filePaths, cwd, t, signal) {
+  if (filePaths.length > 0) {
+    const group = await fileOpenWithActions(filePaths, t, signal);
+    // 自绘菜单把「N 个文件」提示放在打开方式面板顶部；原生菜单没有自由文本行，
+    // 用一条禁用动作复刻，仍然放在子菜单第一行。
+    if (group.openWith !== null && filePaths.length > 1 && Array.isArray(group.openWith.children)) {
+      group.openWith.children.unshift({
+        id: 'open-with-files-note',
+        label: t('openWithFiles', { count: String(filePaths.length) }),
+        disabled: true,
+      });
+    }
+    return group;
+  }
+  return directoryOpenWithActions(cwd, t);
+}
+
 /**
  * 把工具条镜像成宿主菜单动作。
  * @param ctx - 客户端根上下文。
@@ -273,15 +327,13 @@ async function conversationActions(ctx, target, signal) {
   if (items.length === 0) return [];
 
   const settings = itemsSnapshot();
-  const apps = appsSnapshot();
   ensureApps();
-  const enabledApps = apps.ids.filter((id) => childOn(id));
   const targets = filePaths.length > 0 ? filePaths : (cwd !== '' ? [cwd] : []);
-  // 与 HeaderToolbarMenu 的接管条件保持一致：没有目标路径或没有应用目录时不抢宿主按钮。
-  const ownOpenWith = settings.openWith !== false
-    && targets.length > 0
-    && (filePaths.length > 0 || enabledApps.length > 0)
-    && items.some((item) => item.openWith);
+  // 0.2.2 的会话头未必有「打开方式」分体按钮；rc.2 之前这是插件自己加的。
+  // 原生菜单接管正文右键后，不能因为按钮缺失就把这个能力一起丢掉：只要
+  // 有文件或会话目录，就显式补一组打开方式（应用列表到达前先显示加载占位）。
+  const hasOpenWithItem = items.some((item) => item.openWith);
+  const canOpenWith = settings.openWith !== false && targets.length > 0;
 
   const actions = [];
   let section = '';
@@ -292,50 +344,47 @@ async function conversationActions(ctx, target, signal) {
   };
 
   let openWithDone = false;
+  const pushOpenWith = async () => {
+    if (!canOpenWith || openWithDone) return;
+    openWithDone = true;
+    let group;
+    try {
+      group = await openWithGroup(filePaths, cwd, t, signal);
+    } catch (error) {
+      console.warn('[dsh-sidebar-row-menu] native open-with failed:', error);
+      group = { pinned: [], openWith: null };
+    }
+    if (group.openWith === null) return;
+    const separator = takeSeparator('open-with');
+    const combined = [...group.pinned, group.openWith];
+    combined.forEach((action, position) => {
+      if (separator && position === 0) action.separatorBefore = true;
+      actions.push(action);
+    });
+  };
+
   for (let index = 0; index < items.length; index += 1) {
     const item = items[index];
     // 费用 / 后台任务这类状态入口默认隐藏，与自绘菜单同一份设置。
     if (item.stats && blankOption('showCostMeter') !== true) continue;
-    if (item.openWith && settings.openWith === false) continue;
 
-    if (item.openWith && ownOpenWith) {
-      if (openWithDone) continue;
-      openWithDone = true;
-      let group;
-      try {
-        group = filePaths.length > 0
-          ? await fileOpenWithActions(filePaths, t, signal)
-          : directoryOpenWithActions(cwd, t);
-      } catch (error) {
-        console.warn('[dsh-sidebar-row-menu] native open-with failed:', error);
-        group = { pinned: [], openWith: null };
-      }
-      if (group.openWith === null) continue;
-      // 自绘菜单把「N 个文件」提示放在打开方式面板顶部；原生菜单没有自由文本行，
-      // 用一条禁用动作复刻，仍然放在子菜单第一行。
-      if (filePaths.length > 1 && Array.isArray(group.openWith.children)) {
-        group.openWith.children.unshift({
-          id: 'open-with-files-note',
-          label: t('openWithFiles', { count: String(filePaths.length) }),
-          disabled: true,
-        });
-      }
-      const separator = takeSeparator('open-with');
-      const combined = [...group.pinned, group.openWith];
-      combined.forEach((action, position) => {
-        if (separator && position === 0) action.separatorBefore = true;
-        actions.push(action);
-      });
+    if (item.openWith) {
+      await pushOpenWith();
       continue;
     }
 
     if (item.more && item.menu !== null && item.menu !== undefined) {
+      // 工具条里没有打开方式按钮时，把它补在「更多操作」之前，和旧自绘菜单的
+      // 阅读顺序一致；有按钮时仍按按钮原来的位置生成。
+      if (!hasOpenWithItem) await pushOpenWith();
       const entries = moreSubmenuItems(item.menu);
       const select = moreSelectHandler(item.menu, entries);
       const separator = takeSeparator('more');
+      const icon = toolbarIcon(item.icon);
       actions.push({
         id: `more-${index}`,
         label: item.label,
+        ...(icon === undefined ? {} : { icon }),
         ...(separator ? { separatorBefore: true } : {}),
         children: entries.map((entry, position) => ({
           id: `more-item-${position}`,
@@ -348,13 +397,16 @@ async function conversationActions(ctx, target, signal) {
     }
 
     const separator = takeSeparator(item.openWith ? 'open-with' : (item.more ? 'more' : (item.section || 'toolbar')));
+    const icon = toolbarIcon(item.icon);
     actions.push({
       id: `toolbar-${index}`,
       label: item.label,
+      ...(icon === undefined ? {} : { icon }),
       ...(separator ? { separatorBefore: true } : {}),
       run: clickAction(item),
     });
   }
+  if (!hasOpenWithItem) await pushOpenWith();
   return actions;
 }
 
@@ -363,6 +415,18 @@ function ensureRegistered(ctx) {
   if (menus !== null) return true;
   const service = contextMenusOf(ctx);
   if (service === null || typeof service.open !== 'function') return false;
+  if (iconRegistration === null && ctx.slots !== null && ctx.slots !== undefined) {
+    try {
+      iconRegistration = ctx.slots.inject('contextMenu.icon', function* () {
+        yield ctx.slots.register(
+          { name: 'contextMenu.icon', key: TOOLBAR_ICON_KEY },
+          ContextMenuToolbarIcon,
+        );
+      });
+    } catch (error) {
+      console.warn('[dsh-sidebar-row-menu] conversation icon registration failed:', error);
+    }
+  }
   try {
     unregister = service.register({
       id: 'sidebar-row-menu.conversation',
@@ -412,12 +476,19 @@ function openNativeConversationMenu(ctx, event, sessionId, fileTarget) {
 /** 插件卸载：撤回贡献，下一次 apply 重新注册。 */
 function stopNativeConversationMenu() {
   const dispose = unregister;
+  const disposeIcons = iconRegistration;
   unregister = null;
+  iconRegistration = null;
   menus = null;
   try {
     dispose?.();
   } catch {
     /* 注册已随插件生命周期撤销 */
+  }
+  try {
+    disposeIcons?.();
+  } catch {
+    /* 图标槽已随插件生命周期撤销 */
   }
 }
 

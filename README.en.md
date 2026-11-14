@@ -135,15 +135,19 @@ plugin's painted menu with its original icons and custom styling.
   layout, the menu follows its order; otherwise it is DSH's default order. The
   organizer reorders with CSS `order`, so DOM order is not screen order — the menu
   sorts by `getBoundingClientRect()` at right-click time;
-- in the native shell each row is a plain text action, matching the host's own
-  "Diagnose context" and friends, so the original button icon is not repeated; the
-  painted shell keeps its icons, 13px type and spacing. The native shell draws its own
-  submenu chevrons, so the plugin does not add a second one;
+- toolbar rows in the native shell keep their original icons: the button's SVG is
+  rendered as-is through the host's keyed `contextMenu.icon` slot, keeping the
+  button's own size and colour instead of degrading to plain text; the painted shell keeps
+  its icons, 13px type and spacing. The native shell draws its own submenu chevrons,
+  so the plugin does not add a second one;
 - "Open with" is collapsed exactly like the workspace and session menus: pinned apps
   become top-level rows (e.g. "Open with Visual Studio Code") and the remaining apps
   move into an "Open with ›" submenu that expands on hover or click. The "Open with"
   master switch, per-app switches and pinning all apply; turning the master switch off
-  removes the whole group;
+  removes the whole group. When the session header has no split "Open with" button
+  (rc.2+ may keep only a single-app button), the plugin still adds this group whenever
+  the session has a directory or the pointer is over a file, so the capability is not
+  lost with the button;
 - when the pointer is on a file card in the message body, "Open with" opens **those files**
   instead of the session directory: clicking one row of the changed-files card opens just that
   row, while clicking the card's blank space opens the whole card; presented-file cards,

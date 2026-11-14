@@ -78,6 +78,10 @@ function loadClient(stored = {}, options = {}) {
     console,
     URL,
     fetch: options.fetch,
+    // 可选假时钟：file-open 的 5 分钟缓存 / 60 秒刷新需要可推进的 Date.now。
+    ...(options.now === undefined
+      ? {}
+      : { Date: class extends Date { static now() { return options.now(); } } }),
     PointerEvent: class PointerEvent {
       constructor(type, init = {}) {
         this.type = type;
@@ -2127,6 +2131,32 @@ test('file open uses Host Remote file handlers instead of the directory route', 
   assert.equal(calls.at(-1)[0], 'open');
   assert.equal(calls.at(-1)[1].path, 'C:/repo/a.js');
   assert.equal(calls.at(-1)[1].application, 'vscode');
+});
+
+test('file open refreshes a stale association cache instead of freezing it', async () => {
+  let clock = 1_000;
+  const harness = loadClient({}, { now: () => clock });
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const calls = [];
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      calls.push(path);
+      const id = calls.length === 1 ? 'vscode' : 'notepad';
+      return { ok: true, value: [{ id, name: id, default: true, icon: null }] };
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  const first = await exported.fileApplications(['C:/repo/a.js']);
+  assert.deepEqual(Array.from(first, (app) => app.id), ['vscode']);
+
+  // 超过 60 秒仍在 5 分钟 TTL 内：先返回旧结果，但必须后台换新。
+  clock += 61_000;
+  const second = await exported.fileApplications(['C:/repo/a.js']);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(Array.from(second, (app) => app.id), ['notepad']);
 });
 
 test('file open offers default-app and reveal fallbacks without handler enumeration', async () => {

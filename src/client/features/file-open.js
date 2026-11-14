@@ -27,15 +27,21 @@ const REFRESH_AFTER = 60 * 1000;
 /** 查询失败只记一小会儿，避免一次断连让菜单长时间显示不可用。 */
 const NEGATIVE_TTL = 3 * 1000;
 const CACHE_MAX = 64;
+/** 最近几次菜单的完整批次结果：关联类缓存有容量上限，整批结果不能因此丢。 */
+const BATCH_MAX = 8;
 /** 旧自绘菜单没有 observe 通道，只能等一小会儿；超时后后台请求继续跑。 */
 const LEGACY_WAIT_MS = 700;
 
 /** 关联类 key -> { at, apps }；apps 为 null 表示查询失败/桌面不可用。 */
 const cache = new Map();
+/** 完整路径列表 key -> { at, apps }；超过 CACHE_MAX 的批次仍能命中。 */
+const batches = new Map();
 /** 同一关联类的并发请求共用一个 promise，避免重复拉起 PowerShell。 */
 const inflight = new Map();
 const listeners = new Set();
 let revision = 0;
+/** 每次 apply / 卸载递增；旧上下文的在途查询完成后不得写回新状态。 */
+let generation = 0;
 
 /** null = 还没探测；true / false = 探到过。 */
 let desktop = null;
@@ -108,18 +114,21 @@ function probeDesktop() {
     return Promise.resolve(false);
   }
   if (desktopProbe === null) {
+    const epoch = generation;
     desktopProbe = Promise.resolve()
       .then(() => remote.canOpenWorkspacePath())
       .then((result) => {
+        if (epoch !== generation) return false;
         desktop = desktopAvailable(result);
         return desktop;
       })
       .catch(() => {
-        desktop = null;
+        if (epoch === generation) desktop = null;
         return false;
       })
       .finally(() => {
-        desktopProbe = null;
+        // 旧探测结束时新的探测可能已经启动，不能把新 promise 清掉。
+        if (epoch === generation) desktopProbe = null;
       });
   }
   return desktopProbe;
@@ -178,6 +187,45 @@ function remember(key, apps) {
   }
 }
 
+function batchKey(list) {
+  return list.join('\u0000');
+}
+
+/** 整批结果单独留一份，避免超过 CACHE_MAX 的文件集合反复补查。 */
+function rememberBatch(key, apps) {
+  batches.set(key, { at: Date.now(), apps });
+  while (batches.size > BATCH_MAX) {
+    const oldest = batches.keys().next();
+    if (oldest.done) break;
+    batches.delete(oldest.value);
+  }
+}
+
+function batchSnapshot(list) {
+  const key = batchKey(list);
+  const hit = batches.get(key);
+  if (hit === undefined) return undefined;
+  const age = Date.now() - hit.at;
+  if (age > ttlOf(hit)) {
+    batches.delete(key);
+    return undefined;
+  }
+  batches.delete(key);
+  batches.set(key, hit);
+  return { apps: hit.apps, stale: age > REFRESH_AFTER };
+}
+
+/** 插件重新 apply 或卸载时调用：清缓存、断开旧在途任务，避免复用旧 Remote。 */
+function resetFileApplications() {
+  generation += 1;
+  inflight.clear();
+  cache.clear();
+  batches.clear();
+  desktop = null;
+  desktopProbe = null;
+  revision += 1;
+}
+
 function publish() {
   revision += 1;
   for (const listener of [...listeners]) {
@@ -219,6 +267,8 @@ function mergeAnswers(answers) {
 function peekFileApplications(paths) {
   const list = normalList(paths);
   if (list.length === 0) return { apps: [], stale: false };
+  const batch = batchSnapshot(list);
+  if (batch !== undefined) return batch;
   const classes = classRepresentatives(list);
   const answers = [];
   let stale = false;
@@ -240,15 +290,18 @@ function peekFileApplications(paths) {
 /** 查询一个关联类；成功、失败都写缓存并 publish。 */
 async function loadFileClass(key, path, signal) {
   if (signal?.aborted) return null;
+  const epoch = generation;
   const remote = remoteSession();
   if (remote === null || typeof remote.workspacePathApplications !== 'function') {
-    remember(key, null);
-    publish();
+    if (epoch === generation) {
+      remember(key, null);
+      publish();
+    }
     return null;
   }
   try {
     const result = await remote.workspacePathApplications({ path }, signal);
-    if (signal?.aborted) return null;
+    if (signal?.aborted || epoch !== generation) return null;
     const rows = applicationRows(result);
     if (rows === null) {
       remember(key, null);
@@ -260,7 +313,7 @@ async function loadFileClass(key, path, signal) {
     publish();
     return apps;
   } catch {
-    if (signal?.aborted) return null;
+    if (signal?.aborted || epoch !== generation) return null;
     remember(key, null);
     publish();
     return null;
@@ -277,7 +330,9 @@ async function loadFileClass(key, path, signal) {
 async function refreshFileApplications(paths, signal) {
   const list = normalList(paths);
   if (list.length === 0) return [];
+  const epoch = generation;
   const classes = classRepresentatives(list);
+  const classKeys = [...classes.keys()];
   const tasks = [];
   for (const [key, path] of classes) {
     const hit = cache.get(key);
@@ -295,12 +350,21 @@ async function refreshFileApplications(paths, signal) {
       continue;
     }
     const task = loadFileClass(key, path, signal).finally(() => {
-      inflight.delete(key);
+      // 重新 apply 后同一关联类可能已有新请求，旧任务不能把新条目删掉。
+      if (inflight.get(key) === task) inflight.delete(key);
     });
     inflight.set(key, task);
     tasks.push(task);
   }
-  return mergeAnswers(await Promise.all(tasks));
+  const answers = await Promise.all(tasks);
+  // 插件已重新 apply / 卸载：旧 Remote 的答案不能污染新上下文。
+  if (epoch !== generation) return null;
+  const merged = mergeAnswers(answers);
+  // 整批都有确定答案（含「没有程序」）才记快照；中途取消的批次不留下半份结果。
+  // 类缓存按容量淘汰后 cache.has 仍可能为 false，但成功返回的答案本身已经完整。
+  const complete = answers.every((value, index) => value !== null || cache.has(classKeys[index]));
+  if (complete) rememberBatch(batchKey(list), merged);
+  return merged;
 }
 
 /** 给旧自绘菜单一个有限等待；超时只放弃这次渲染，后台请求仍在跑。 */
@@ -404,6 +468,7 @@ export {
   openFilesWith,
   peekFileApplications,
   refreshFileApplications,
+  resetFileApplications,
   revealFiles,
   subscribeFileApplications,
 };

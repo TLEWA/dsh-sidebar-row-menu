@@ -2159,6 +2159,74 @@ test('file open refreshes a stale association cache instead of freezing it', asy
   assert.deepEqual(Array.from(second, (app) => app.id), ['notepad']);
 });
 
+test('a file batch larger than the class cache is not re-enumerated in a loop', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const calls = [];
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      calls.push(path);
+      return { ok: true, value: [{ id: 'vscode', name: 'Visual Studio Code', default: true, icon: null }] };
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+  exported.apply(makeCtx({ remote: { session: remote } }));
+
+  // 无扩展名文件各自成类，65 个关联类超过 64 条类缓存；整批结果仍应命中。
+  const paths = Array.from({ length: 65 }, (_, index) => `C:/repo/file${index}`);
+  const first = await exported.fileApplications(paths);
+  assert.deepEqual(Array.from(first, (app) => app.id), ['vscode']);
+  assert.equal(calls.length, 65);
+
+  const second = await exported.fileApplications(paths);
+  assert.deepEqual(Array.from(second, (app) => app.id), ['vscode']);
+  assert.equal(calls.length, 65);
+});
+
+test('reapplying the plugin ignores in-flight association requests', async () => {
+  const harness = loadClient();
+  const exported = harness.registration.factory(makeRequire([], [], []));
+  const oldCalls = [];
+  const newCalls = [];
+  let releaseOld;
+  const oldRemote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: ({ path }) => {
+      oldCalls.push(path);
+      return new Promise((resolve) => {
+        releaseOld = resolve;
+      });
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+  const newRemote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      newCalls.push(path);
+      return { ok: true, value: [{ id: 'vscode', name: 'Visual Studio Code', default: true, icon: null }] };
+    },
+    openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+  };
+
+  exported.apply(makeCtx({ remote: { session: oldRemote } }));
+  const first = exported.fileApplications(['C:/repo/a.txt']);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(oldCalls.length, 1);
+
+  // 重新 apply 后必须换用新 Remote，而不是复用旧上下文里悬挂的同扩展名请求。
+  exported.apply(makeCtx({ remote: { session: newRemote } }));
+  const second = await exported.fileApplications(['C:/repo/a.txt']);
+  assert.deepEqual(Array.from(second, (app) => app.id), ['vscode']);
+  assert.equal(newCalls.length, 1);
+
+  releaseOld({ ok: true, value: [{ id: 'notepad', name: 'Notepad', default: true, icon: null }] });
+  assert.equal(await first, null);
+  const third = await exported.fileApplications(['C:/repo/a.txt']);
+  assert.deepEqual(Array.from(third, (app) => app.id), ['vscode']);
+  assert.equal(newCalls.length, 1);
+});
+
 test('file open offers default-app and reveal fallbacks without handler enumeration', async () => {
   const harness = loadClient();
   const exported = harness.registration.factory(makeRequire([], [], []));

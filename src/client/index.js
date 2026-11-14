@@ -18,6 +18,7 @@ import { closeMenu, setRootCtx } from './runtime.js';
 import { closeToast } from './toast.js';
 import { installStyles } from './styles.js';
 import { startArchivedRows } from './features/archived.js';
+import { stopNativeConversationMenu } from './features/conversation-menu-native.js';
 import { registerDeleteDialog } from './features/delete-dialog.js';
 import { install } from './features/row-context.js';
 import { registerSessionMenu } from './features/session-menu.js';
@@ -58,6 +59,7 @@ export function apply(ctx) {
     ctx.effect(() => () => {
       setRootCtx(null);
       stopSessionMenu?.();
+      stopNativeConversationMenu();
       stopWorkspaceMenu();
       stopArchivedRows();
       teardown();

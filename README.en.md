@@ -125,13 +125,20 @@ neither a workspace nor a session (e.g. "Show more") are not intercepted.
 
 Right-clicking in the conversation body — blank space, thinking blocks, replies and tool
 summaries (but not the composer, the header toolbar or tool cards themselves) — opens a
-vertical menu that lists that toolbar in **visual** left-to-right order, each row carrying
-the original button's icon:
+vertical menu that lists that toolbar in **visual** left-to-right order. Since 0.2.2-rc.2
+the host's native context-menu shell renders it, so positioning, dismissal, keyboard
+navigation, submenus and separators belong to the host; 0.2.1 and earlier keep the
+plugin's painted menu with its original icons and custom styling.
 
-- with `dsh-sidebar-organizer` installed and a customised "session header toolbar"
+- both shells share the same entries, switches and ordering: with
+  `dsh-sidebar-organizer` installed and a customised "session header toolbar"
   layout, the menu follows its order; otherwise it is DSH's default order. The
   organizer reorders with CSS `order`, so DOM order is not screen order — the menu
   sorts by `getBoundingClientRect()` at right-click time;
+- in the native shell each row is a plain text action, matching the host's own
+  "Diagnose context" and friends, so the original button icon is not repeated; the
+  painted shell keeps its icons, 13px type and spacing. The native shell draws its own
+  submenu chevrons, so the plugin does not add a second one;
 - "Open with" is collapsed exactly like the workspace and session menus: pinned apps
   become top-level rows (e.g. "Open with Visual Studio Code") and the remaining apps
   move into an "Open with ›" submenu that expands on hover or click. The "Open with"
@@ -158,8 +165,9 @@ the original button's icon:
   session log, Feedback, …), and picking one runs it immediately. Its row order follows
   `dsh-sidebar-organizer` too: dragging rows inside the "…" popover saves the order to
   `dsh.sidebar-organizer.host-menu-order.v1`, and this submenu re-sorts with it;
-- sections are separated by faint rules automatically, and row height, padding,
-  radius, 13px type and 14px icons match DSH's native context menus;
+- sections are separated by faint rules automatically; the painted shell matches DSH's
+  native row height, padding, radius, 13px type and 14px icons, while the native shell
+  inherits the host menu's own styling;
 - a "More" style overflow trigger is pinned to the last row (can be switched off in
   Settings); buttons the organizer tucked into "More actions" do not show up on their
   own;

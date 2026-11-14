@@ -77,11 +77,14 @@ function openWithAction(ctx, target, t) {
       run: () => openApp(ctx, id, sessionId, t),
     }));
   }
+  // 只有右键面板才隐藏宿主原生「在应用中打开」：行尾「…」菜单按 README 的兼容边界
+  // 仍保留原生项，所以在「…」手势下不能打去重标记。
+  const dedupe = currentMenuGesture() === 'context' ? ' dsrm-native-dedupe' : '';
   return [{
     id: 'sidebar-row-menu.session.open-with',
     // 宿主 0.2.2-rc.2 起自己画箭头；更早的宿主走 slot 注入，不会用到这段。
     // 保留插件箭头兜底，styles.js 检测到宿主箭头时隐藏它，避免叠成两个。
-    label: h('span', { className: 'dsrm-host-label dsrm-native-dedupe' },
+    label: h('span', { className: `dsrm-host-label${dedupe}` },
       h('span', { className: 'dsrm-host-label-text' }, t('openWith')),
       jsx(IconChevronRightOutlineRegular, { size: 12, className: 'dsrm-submenu-chevron' }),
     ),

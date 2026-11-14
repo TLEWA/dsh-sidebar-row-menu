@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## 1.13.1 — 2026-11-14
 
 - **No more double ">" chevrons on submenu entries since 0.2.2-rc.2.** The host started drawing its own right-aligned chevron for submenu items in that release, while the plugin still added a fallback one for older hosts, so "Open with" and "Default permission for new sessions" showed two arrows side by side. The fallback chevron now renders only when the host does not draw one; 0.2.2-rc.1 and earlier still get the plugin's arrow.
 - **Session context menus are rendered from host menu contributions since 0.2.2-rc.2, and the native "In app" / "Open in app" entry no longer duplicates "Open with".** Session entries move to the host `contextMenus` (pinned apps and the delete entries keep their behaviour); in a panel that carries the plugin marker the host's own open-in-app entry is hidden, while the row's "…" menu is untouched. 0.2.2-rc.1 and earlier keep the slot injection, and an unreadable host version falls back to the old path so the whole menu never disappears.

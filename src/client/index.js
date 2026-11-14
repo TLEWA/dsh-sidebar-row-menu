@@ -18,6 +18,7 @@ import { closeMenu, setRootCtx } from './runtime.js';
 import { closeToast } from './toast.js';
 import { installStyles } from './styles.js';
 import { startArchivedRows } from './features/archived.js';
+import { stopNativeConversationMenu } from './features/conversation-menu-native.js';
 import { registerDeleteDialog } from './features/delete-dialog.js';
 import { install } from './features/row-context.js';
 import { registerSessionMenu } from './features/session-menu.js';
@@ -39,10 +40,12 @@ export function apply(ctx) {
   if (typeof ctx.locale?.register === 'function') {
     ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'sidebar-row-menu: dictionaries');
   }
+  // 会话菜单在 rc.2+ 走原生数据贡献，不依赖 slots 服务；旧宿主仍由
+  // registerSessionMenu 内部退回 slot 注入。
+  const stopSessionMenu = registerSessionMenu(ctx);
   if (ctx.slots !== null && ctx.slots !== undefined) {
     // `slots.inject` 自带 ctx.effect 生命周期，不要再包一层 effect：
     // 它会在 slot 声明出现时注册、插件卸载时自动撤销。
-    registerSessionMenu(ctx);
     registerDeleteDialog(ctx);
     registerSettings(ctx);
   }
@@ -55,6 +58,8 @@ export function apply(ctx) {
   if (ctx !== null && typeof ctx.effect === 'function') {
     ctx.effect(() => () => {
       setRootCtx(null);
+      stopSessionMenu?.();
+      stopNativeConversationMenu();
       stopWorkspaceMenu();
       stopArchivedRows();
       teardown();

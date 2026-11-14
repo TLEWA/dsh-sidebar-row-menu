@@ -28,6 +28,7 @@ function loadClient(stored = {}, options = {}) {
       },
     },
     location: { href: 'http://127.0.0.1:10102/' },
+    ...(options.boot === undefined ? {} : { __DSH_BOOT__: options.boot }),
     localStorage,
     addEventListener(type, listener, capture) {
       listeners.push({ type, listener, capture });
@@ -42,6 +43,7 @@ function loadClient(stored = {}, options = {}) {
       if (options.runTimers === true && typeof fn === 'function') fn();
       return 0;
     },
+    clearTimeout: () => {},
   };
   const documentListeners = [];
   const document = {
@@ -749,6 +751,261 @@ test('session entries disappear when dsh-session-menu already provides them', ()
   assert.equal(deleteArchived.Component({ sessionId: 's1', displayTitle: 'Session 1', useMenuOpenState: () => [true, () => {}], t }), null);
 });
 
+test('0.2.2-rc.2+ registers session entries as native context menu contributions', () => {
+  const { registration, documentListeners } = loadClient(
+    { 'dsh.sidebar-row-menu.placement.v1': JSON.stringify({ sessionOpenWith: 'both' }) },
+    { boot: { release: { version: '0.2.2-rc.3' } } },
+  );
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+    workspaces: {
+      list: {
+        getSnapshot: () => ({ archivedSessionIds: ['s1'] }),
+        subscribe: () => () => {},
+      },
+    },
+  });
+  exported.apply(ctx);
+
+  const session = providers.filter((spec) => spec.target === 'session');
+  assert.equal(
+    session.map((spec) => spec.id).join(','),
+    'sidebar-row-menu.session.pinned,sidebar-row-menu.session.open-with,sidebar-row-menu.session.delete,sidebar-row-menu.session.delete-archived',
+  );
+  assert.deepEqual(session.map((spec) => spec.order), [495, 500, 510, 520]);
+
+  // 宿主接管后不能再往旧 slot 里塞会话项，否则同一面板会出现两份。
+  const slotEntries = ctx.slots.registrations.filter(
+    (entry) => entry.spec.name === 'sidebar.workspaces.session.menu.item',
+  );
+  assert.equal(slotEntries.length, 0);
+
+  const target = { sessionId: 's1', displayTitle: 'Session 1' };
+  const openWith = session[1].resolve(target);
+  assert.equal(openWith.length, 1);
+  assert.equal(openWith[0].label.props.className, 'dsrm-host-label dsrm-native-dedupe');
+  // 应用列表没回来时也要有子菜单：宿主据此画箭头，点开是一条禁用占位项。
+  assert.equal(openWith[0].children[0].disabled, true);
+
+  const remove = session[2].resolve(target);
+  assert.equal(remove.length, 1);
+  assert.equal(remove[0].danger, true);
+  assert.equal(typeof remove[0].run, 'function');
+
+  assert.equal(session[3].resolve(target).length, 1);
+
+  // 行尾「…」菜单不参与去重：同样的「打开方式」不能再带标记，否则会连原生入口一起隐藏。
+  const pointerdowns = documentListeners.filter((entry) => entry.type === 'pointerdown');
+  for (const entry of pointerdowns) {
+    try {
+      entry.listener({
+        isTrusted: true,
+        target: { nodeType: 1, closest: (selector) => (selector.includes('rowActions') ? {} : null) },
+      });
+    } catch {
+      // 其他 pointerdown 监听器可能假定真实 DOM；这里只找会收右键标记的那个。
+    }
+  }
+  const inEllipsis = session[1].resolve(target);
+  assert.equal(inEllipsis.length, 1);
+  assert.equal(inEllipsis[0].label.props.className, 'dsrm-host-label');
+});
+
+test('0.2.2-rc.1 keeps the slot entries even when contextMenus exists', () => {
+  const { registration } = loadClient({}, { boot: { release: { version: '0.2.2-rc.1' } } });
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+  });
+  exported.apply(ctx);
+
+  const sessionEntries = ctx.slots.registrations.filter(
+    (entry) => entry.spec.name === 'sidebar.workspaces.session.menu.item',
+  );
+  assert.equal(sessionEntries.length, 4);
+  assert.equal(providers.filter((spec) => spec.target === 'session').length, 0);
+});
+
+test('the native open-in-app dedupe rule ships with the client bundle', () => {
+  // 只允许隐藏宿主原生「在应用中打开」：带 contextMenu.icon 槽的 right-up 图标，
+  // 且不是插件自己的 dsrm-native-dedupe 项；不能回到按“任意直接 svg”一刀切。
+  assert.equal(
+    source.includes('button[role="menuitem"][aria-haspopup="menu"]:has([data-slot="contextMenu.icon"] svg[data-icon="dsw-icon-right-up-outline-regular"]):not(:has(.dsrm-native-dedupe))'),
+    true,
+  );
+  assert.equal(source.includes(':has(> svg):not(:has(.dsrm-native-dedupe))'), false);
+});
+
+test('0.2.2 conversation body right-click opens the native menu shell', async () => {
+  const opened = [];
+  const providers = [];
+  const menus = {
+    register(spec) {
+      providers.push(spec);
+      return () => {};
+    },
+    open(target, point) {
+      opened.push({ target, point });
+    },
+  };
+  const { registration, listeners, window, document } = loadClient({}, {
+    boot: { release: { version: '0.2.2-rc.3' } },
+  });
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+
+  exported.apply(makeCtx({ contextMenus: menus }));
+  const conversationProviders = () => providers.filter((spec) => spec.target === 'conversation');
+  // 懒注册：没右键过就不该给宿主塞 conversation provider。
+  assert.equal(conversationProviders().length, 0);
+
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  const event = fireContextMenu(listener, makeConversationTarget());
+
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0].target.kind, 'conversation');
+  assert.equal(opened[0].point.x, 40);
+  assert.equal(opened[0].point.y, 60);
+  assert.equal(conversationProviders().length, 1);
+  assert.equal(conversationProviders()[0].id, 'sidebar-row-menu.conversation');
+  assert.equal(conversationProviders()[0].target, 'conversation');
+  // 应用列表 / 置顶 / 工具条设置到达后宿主能重解析，占位行不会一直停在「加载中」。
+  assert.equal(typeof conversationProviders()[0].observe, 'function');
+  assert.equal(conversationProviders()[0].observe().length, 5);
+  assert.equal(
+    roots.some((entry) => entry.host.__element?.type?.name === 'HeaderToolbarMenu'),
+    false,
+    'native shell must replace the painted menu',
+  );
+
+  const actions = await conversationProviders()[0].resolve(opened[0].target.value, { aborted: false });
+  assert.equal(actions.map((action) => action.label).join(','), '查找');
+});
+
+test('0.2.2 native conversation menu restores toolbar icons and keeps open-with', async () => {
+  const opened = [];
+  const providers = [];
+  const menus = {
+    register(spec) {
+      providers.push(spec);
+      return () => {};
+    },
+    open(target, point) {
+      opened.push({ target, point });
+    },
+  };
+  const calls = [];
+  const remote = {
+    canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+    workspacePathApplications: async ({ path }) => {
+      calls.push(path);
+      return {
+        ok: true,
+        value: [{ id: 'vscode', name: 'Visual Studio Code', default: true, icon: '' }],
+      };
+    },
+    openWorkspacePath: async () => ({ ok: true }),
+  };
+  const { registration, listeners, window, document } = loadClient({}, {
+    boot: { release: { version: '0.2.2-rc.3' } },
+  });
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const find = makeToolbarButton('查找', 646, {
+    iconHtml: '<svg width="14" height="14"><use href="#find"/></svg>',
+  });
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+
+  const ctx = makeCtx({ contextMenus: menus, remote: { session: remote } });
+  exported.apply(ctx);
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+
+  const provider = providers.find((spec) => spec.target === 'conversation');
+  const actions = await provider.resolve({ sessionId: 's1', cwd: 'C:/work', paths: [] }, { aborted: false });
+  assert.equal(actions.map((action) => action.label).join(','), '查找,openWith');
+  assert.equal(actions[0].icon.key, 'sidebar-row-menu.toolbar');
+  assert.ok(actions[0].icon.html.includes('<svg'), 'toolbar glyphs must be carried into the host menu');
+
+  // 图标通过宿主 keyed slot 渲染：HTML 走 span，图片地址走 img。
+  const iconRegistration = ctx.slots.registrations.find(
+    (entry) => entry.spec.name === 'contextMenu.icon' && entry.spec.key === 'sidebar-row-menu.toolbar',
+  );
+  assert.ok(iconRegistration, 'the contextMenu.icon slot must be registered');
+  const glyph = iconRegistration.Component({ icon: { html: '<svg width="14"></svg>' } });
+  assert.equal(glyph.type, 'span');
+  assert.equal(glyph.props.className, 'dsrm-header-icon');
+  assert.equal(glyph.props.dangerouslySetInnerHTML.__html, '<svg width="14"></svg>');
+  const image = iconRegistration.Component({ icon: { src: 'open-in-app/icon/vscode' } });
+  assert.equal(image.type, 'img');
+  assert.equal(image.props.src, 'open-in-app/icon/vscode');
+
+  // 文件模式仍按指针下的文件列程序，并在多文件时保留「N 个文件」提示。
+  const fileActions = await provider.resolve(
+    { sessionId: 's1', cwd: 'C:/work', paths: ['C:/work/a.txt', 'C:/work/b.txt'] },
+    { aborted: false },
+  );
+  const fileOpen = fileActions.at(-1);
+  assert.equal(fileOpen.label, 'openWith');
+  assert.equal(fileOpen.children[0].label, 'openWithFiles');
+  assert.equal(fileOpen.children[0].disabled, true);
+  assert.equal(calls.join(','), 'C:/work/a.txt,C:/work/b.txt');
+});
+
+test('0.2.2-rc.1 keeps the painted conversation menu even with contextMenus', () => {
+  const opened = [];
+  const providers = [];
+  const menus = {
+    register(spec) {
+      providers.push(spec);
+      return () => {};
+    },
+    open(target, point) {
+      opened.push({ target, point });
+    },
+  };
+  const { registration, listeners, window, document } = loadClient({}, {
+    boot: { release: { version: '0.2.2-rc.1' } },
+  });
+  window.innerWidth = 1200;
+  window.innerHeight = 800;
+  const roots = [];
+  const exported = registration.factory(makeRequire([], roots, []));
+  const find = makeToolbarButton('查找', 646);
+  find.group = 'utilities';
+  installFakeHeader(document, [find]);
+
+  exported.apply(makeCtx({ contextMenus: menus }));
+  const listener = listeners.find((entry) => entry.type === 'contextmenu').listener;
+  fireContextMenu(listener, makeConversationTarget());
+
+  assert.equal(opened.length, 0);
+  assert.equal(providers.filter((spec) => spec.target === 'conversation').length, 0);
+  assert.equal(toolbarRows(roots).map((row) => row.props.children).join(','), '查找');
+});
+
 test('unarchived sessions get the delete entry only after opting in', () => {
   const ITEMS_KEY = 'dsh.sidebar-row-menu.items.v1';
 
@@ -1352,7 +1609,10 @@ function makeToolbarButton(label, left, options = {}) {
     matches(selector) {
       return String(selector).startsWith('button');
     },
-    querySelector() {
+    querySelector(selector) {
+      if (selector === 'svg' && typeof options.iconHtml === 'string') {
+        return { outerHTML: options.iconHtml };
+      }
       return null;
     },
     querySelectorAll() {

@@ -1,12 +1,12 @@
 import { appIcon, appLabel } from '../apps-catalog.js';
-import { ICON_ROUTE, MENU_ATTR, NS } from '../constants.js';
+import { ICON_ROUTE, MENU_ATTR } from '../constants.js';
 import { ContextMenuPermissionIcon, openAppAt, permissionCheck } from './app-actions.js';
 import { archivedCountOfWorkspace, archivedRowsVisibleIn, toggleWorkspaceArchived, workspaceSessionIds } from './archived.js';
 import { OpenWithSubmenu } from './open-with.js';
-import { ContextMenuAppIcon, appsSource, contextMenusOf } from './session-menu.js';
+import { ContextMenuAppIcon, appsSource, contextMenusOf } from './context-menu-shared.js';
 import { copyText, workspaceCwd } from '../host-api.js';
 import { IconArchiveOffOutlineRegular, IconArchiveOutlineRegular, IconChevronRightOutlineRegular, IconCopyOutlineRegular, IconEditOutlineRegular, IconNewChatOutlineRegular, IconProjectAddOutlineRegular, IconRightUpOutlineRegular, IconTrashOutlineRegular, MenuItemButton, MenuSurface, createRoot, jsx, useEffect, useRef } from '../platform.js';
-import { beginMenu, closeMenu, rootCtx, serviceOf } from '../runtime.js';
+import { beginMenu, closeMenu, localeOf, rootCtx, serviceOf } from '../runtime.js';
 import { appsSnapshot, ensureApps, openApplication, useApps } from '../store/apps.js';
 import { childOn, useChildren } from '../store/children.js';
 import { requestDelete } from '../store/delete-request.js';
@@ -255,15 +255,6 @@ function showWorkspaceMenu(props, x, y, mode = 'context') {
   }));
 }
 
-function localeOf(ctx) {
-  try {
-    if (typeof ctx?.locale?.bind === 'function') return ctx.locale.bind(NS);
-  } catch (error) {
-    console.warn('[dsh-sidebar-row-menu] locale bind failed:', error);
-  }
-  return (key) => key;
-}
-
 /** 工作区行右键菜单（没有 slot 可复用，只能自己组）。 */
 function openWorkspaceMenu(props, x, y, mode = 'context') {
   if (rootCtx === null) return;
@@ -362,9 +353,8 @@ function workspaceMenuActions(ctx, value, t) {
       id: 'open-with',
       group: 'open-with',
       separatorBefore: pinned.length === 0,
-      // 宿主的菜单项对子菜单只设 aria-haspopup，不画右侧箭头。label 在宿主里
-      // 是直接当 children 渲染的，所以这里塞一个右对齐的箭头元素，与会话菜单
-      // 里的「打开方式」保持同一套外观（0.2.1 自绘菜单本来就是自己画的）。
+      // 宿主 0.2.2-rc.2 起自己给带 children 的菜单项画右侧箭头，rc.1 及更早不画。
+      // 插件保留自己的箭头兜底，styles.js 在检测到宿主箭头时把它隐藏，避免叠成两个。
       label: h('span', { className: 'dsrm-host-label' },
         h('span', { className: 'dsrm-host-label-text' }, t('openWith')),
         jsx(IconChevronRightOutlineRegular, { size: 12, className: 'dsrm-submenu-chevron' }),
@@ -408,6 +398,7 @@ function workspaceMenuActions(ctx, value, t) {
       id: 'new-session-permission',
       group: 'permission',
       separatorBefore: true,
+      // 同上：有宿主箭头时隐藏插件箭头。
       label: h('span', { className: 'dsrm-host-label' },
         h('span', { className: 'dsrm-host-label-text' }, t('newSessionPermission')),
         jsx(IconChevronRightOutlineRegular, { size: 12, className: 'dsrm-submenu-chevron' }),

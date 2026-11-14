@@ -15,17 +15,25 @@ Right-click menus for the sidebar of [DeepSeek Harness](https://github.com/deeps
   at the pointer, with the plugin's own entries appended.
 
 DSH 0.2.2 turned the sidebar context menus into data: the host renders the workspace
-menu and this plugin contributes its items by `order`; the session menu is still
-rendered from its slot by the host, and the host also opens it at the pointer. On
-0.2.2 the look, row height, icons, danger color, keyboard navigation and
-click-outside / Escape dismissal are therefore exactly the built-in menu's — the
-plugin only supplies entries. Hosts before 0.2.2 have no such service: the plugin
+menu and this plugin contributes its items by `order`; since 0.2.2-rc.2 the same
+contributions drive the session menu, and the plugin interleaves its top-level
+entries by `order`. On 0.2.2-rc.1 and earlier the session menu is still rendered from
+its slot by the host, which also opens it at the pointer. On 0.2.2 the look, row
+height, icons, danger color, keyboard navigation and click-outside / Escape
+dismissal are therefore exactly the built-in menu's — the plugin only supplies
+entries. Hosts before 0.2.2 have no such service: the plugin
 still draws the workspace menu with DSH's official `MenuSurface` + `MenuItemButton`,
 and still moves the row's "…" menu to the pointer on right-click.
 
-Session menu content comes from the `sidebar.workspaces.session.menu.item` slot —
-built-in actions and other plugins' actions are all there. This plugin only appends
-its own entries; it does not copy or hardcode any built-in action.
+On 0.2.2-rc.1 and earlier, session menu content comes from the
+`sidebar.workspaces.session.menu.item` slot — built-in actions and other plugins'
+actions are all there. This plugin only appends its own entries; it does not copy or
+hardcode any built-in action. Since 0.2.2-rc.2 the host's `contextMenus` render the
+same entries and the plugin still registers only its own. The host's built-in
+"In app" entry overlaps with this plugin's "Open with", so the plugin hides only that
+one native entry inside the session right-click panel (identified by its icon in the
+`contextMenu.icon` slot, so other plugins' submenus are untouched); the row's "…"
+menu is untouched.
 
 > The plugin's entries appear in the right-click menu by default. Settings → "Row
 > menu" → "Menu placement" can move each entry to the "…" menu only, or show it in
@@ -61,20 +69,22 @@ runs the official dialogs for Rename and Delete workspace.
 | Copy workspace path | Copies the directory path |
 | Reveal in file manager (built-in) | Opens the workspace directory in Explorer; provided by the host on 0.2.2, absent on 0.2.1 |
 | Pinned open-with app | A pinned app shows directly at the top level (e.g. "Open with Visual Studio Code") and opens the workspace directory |
-| Open with | A submenu of external apps (editors, terminals, file managers) sharing the session menu's catalog, pinning and toggles; hover expands it. Host menu items draw no submenu caret, so the plugin renders the label as text plus a right-aligned chevron, matching the session menu; the 0.2.1 self-drawn menu uses an arrow icon |
+| Open with | A submenu of external apps (editors, terminals, file managers) sharing the session menu's catalog, pinning and toggles; hover expands it. Hosts up to 0.2.2-rc.1 draw no submenu caret, so the plugin renders the label as text plus a right-aligned chevron; since 0.2.2-rc.2 the host draws its own and the plugin's fallback hides itself, so the two never stack. The 0.2.1 self-drawn menu uses an arrow icon |
 | Default permission for new sessions | A submenu of the host's native permission presets (read-only / workspace-write / danger-full-access). The chosen preset becomes the default for **sessions created afterwards in this workspace**; the effective one is checked on the right, and "Follow global default" clears the per-workspace value. Existing sessions are never changed |
 | Delete workspace (built-in) | Opens the official delete confirmation; removes only the workspace registration and leaves its sessions under "Ungrouped". On 0.2.1 the plugin renders this item itself |
 | Delete workspace and all sessions | Permanently deletes every session and transcript under the workspace first, then the workspace registration. If any session fails, the workspace is kept so the user can retry. The directory itself is not deleted |
 
 ### Session row
 
-Right-click does not build a second menu: on 0.2.2 the host opens the row's native
-menu at the pointer, and on 0.2.1 the plugin triggers the row's "…" menu and moves
-its anchor to the pointer. Either way the content comes from the same slot:
+Right-click does not build a second menu: since 0.2.2-rc.2 the host opens the row's
+native menu at the pointer and the plugin contributes its entries through
+`contextMenus`; on 0.2.2-rc.1 the host opens the slot menu; on 0.2.1 the plugin
+triggers the row's "…" menu and moves its anchor to the pointer. The content always
+comes from the host menu and the actions already in the slot:
 
 | Source | Entries |
 | --- | --- |
-| DSH built-ins | Rename, Fork session, Pin / Unpin, Archive / Unarchive, Copy Session ID |
+| DSH built-ins | Rename, Fork session, Pin / Unpin, Archive / Unarchive, Copy Session ID; in the right-click panel on 0.2.2-rc.2+ the plugin hides only the built-in "In app" entry so it does not duplicate "Open with" (identified by its right-up icon in the `contextMenu.icon` slot, so other plugins' submenus are untouched; the row's "…" menu keeps it) |
 | Other plugins | Whatever they register into `sidebar.workspaces.session.menu.item` |
 | This plugin | Pinned open-with apps (top level), Open with (submenu), Delete session / Delete all archived sessions (archived rows by default; unarchived rows can be opted in) |
 
@@ -115,18 +125,29 @@ neither a workspace nor a session (e.g. "Show more") are not intercepted.
 
 Right-clicking in the conversation body — blank space, thinking blocks, replies and tool
 summaries (but not the composer, the header toolbar or tool cards themselves) — opens a
-vertical menu that lists that toolbar in **visual** left-to-right order, each row carrying
-the original button's icon:
+vertical menu that lists that toolbar in **visual** left-to-right order. Since 0.2.2-rc.2
+the host's native context-menu shell renders it, so positioning, dismissal, keyboard
+navigation, submenus and separators belong to the host; 0.2.1 and earlier keep the
+plugin's painted menu with its original icons and custom styling.
 
-- with `dsh-sidebar-organizer` installed and a customised "session header toolbar"
+- both shells share the same entries, switches and ordering: with
+  `dsh-sidebar-organizer` installed and a customised "session header toolbar"
   layout, the menu follows its order; otherwise it is DSH's default order. The
   organizer reorders with CSS `order`, so DOM order is not screen order — the menu
   sorts by `getBoundingClientRect()` at right-click time;
+- toolbar rows in the native shell keep their original icons: the button's SVG is
+  rendered as-is through the host's keyed `contextMenu.icon` slot, keeping the
+  button's own size and colour instead of degrading to plain text; the painted shell keeps
+  its icons, 13px type and spacing. The native shell draws its own submenu chevrons,
+  so the plugin does not add a second one;
 - "Open with" is collapsed exactly like the workspace and session menus: pinned apps
   become top-level rows (e.g. "Open with Visual Studio Code") and the remaining apps
   move into an "Open with ›" submenu that expands on hover or click. The "Open with"
   master switch, per-app switches and pinning all apply; turning the master switch off
-  removes the whole group;
+  removes the whole group. When the session header has no split "Open with" button
+  (rc.2+ may keep only a single-app button), the plugin still adds this group whenever
+  the session has a directory or the pointer is over a file, so the capability is not
+  lost with the button;
 - when the pointer is on a file card in the message body, "Open with" opens **those files**
   instead of the session directory: clicking one row of the changed-files card opens just that
   row, while clicking the card's blank space opens the whole card; presented-file cards,
@@ -148,8 +169,9 @@ the original button's icon:
   session log, Feedback, …), and picking one runs it immediately. Its row order follows
   `dsh-sidebar-organizer` too: dragging rows inside the "…" popover saves the order to
   `dsh.sidebar-organizer.host-menu-order.v1`, and this submenu re-sorts with it;
-- sections are separated by faint rules automatically, and row height, padding,
-  radius, 13px type and 14px icons match DSH's native context menus;
+- sections are separated by faint rules automatically; the painted shell matches DSH's
+  native row height, padding, radius, 13px type and 14px icons, while the native shell
+  inherits the host menu's own styling;
 - a "More" style overflow trigger is pinned to the last row (can be switched off in
   Settings); buttons the organizer tucked into "More actions" do not show up on their
   own;
@@ -456,22 +478,27 @@ The plugin does not keep the global filter hostage: once the user picks a filter
 
 ### Why session actions are not hardcoded
 
-The native session menu is not a hardcoded button list: it is
-`renderSlot('sidebar.workspaces.session.menu.item', ...)`. Fork, pin, archive and
-third-party actions are all slot entries. Slot ownership is enforced by the
-renderer: an entry may only render child slots it declared itself, so a third
-party cannot re-layout someone else's slot.
+The native session menu is not a hardcoded button list: up to 0.2.2-rc.1 it is
+`renderSlot('sidebar.workspaces.session.menu.item', ...)`, and since 0.2.2-rc.2 it
+is rendered from the host's `ctx.contextMenus` contributions. Fork, pin, archive and
+third-party actions are slot entries or menu contributions. Slot ownership is
+enforced by the renderer: an entry may only render child slots it declared itself,
+so a third party cannot re-layout someone else's slot.
 
 So a session right-click never copies menu content:
 
-- 0.2.2: the row component carries the host's `getTriggerProps` (its `onContextMenu`
-  hands `kind:'session'` to `ctx.contextMenus`), so the host owns the gesture and the
-  plugin does not even need to find a `Menu` or click a button;
+- 0.2.2-rc.2+: the row component carries the host's `getTriggerProps` (its
+  `onContextMenu` hands `kind:'session'` to `ctx.contextMenus`), so the host owns the
+  gesture; the plugin registers its own `target:'session'` contributions and does not
+  even need to find a `Menu` or click a button;
+- 0.2.2-rc.1: the host still opens it at the pointer, but the content comes from the
+  slot;
 - 0.2.1: find the `Menu` in the row's fiber subtree and trigger its anchor (the
   ellipsis button), which opens the same slot content.
 
-The plugin's own actions are registered through `ctx.slots.inject` +
-`ctx.slots.register`, so:
+On older hosts the plugin registers through `ctx.slots.inject` +
+`ctx.slots.register`; since 0.2.2-rc.2 it registers `ctx.contextMenus` contributions
+instead, so:
 
 - they do not depend on built-in fork/pin entries existing;
 - new entries from DSH or other plugins show up automatically;
@@ -501,20 +528,22 @@ position.
 On 0.2.2 both gestures open the same host menu, and React cannot tell where it came
 from, so the plugin watches the gesture: a right-click sets an in-process mark, and a
 `MutationObserver` waits for a new `[role="menu"]` panel to appear (0.2.2 mounts the
-menu asynchronously, after every provider is ready); once the panel shows up the mark
-is released 400 ms later, with a 3 s fallback in case another plugin swallows the
-gesture. The `pointerdown` on the row's "…" button clears the mark immediately, and
-only trusted input counts (`isTrusted`) — the synthetic `pointerdown` the plugin
-re-dispatches is not a gesture.
+menu asynchronously, after every provider is ready), with a 3 s fallback in case
+another plugin swallows the gesture. The `pointerdown` on the row's "…" button
+switches the gesture to "ellipsis" immediately, and only trusted input counts
+(`isTrusted`) — the synthetic `pointerdown` the plugin re-dispatches is not a gesture.
 
-Entries read the mark once while mounting, so a slow panel does not matter, and the
-mark only lives until "the panel for this gesture appeared", never into the next one.
+The host re-resolves contributions asynchronously after the panel opens, so the
+gesture is also kept in a sticky `menuGesture`: after the panel appears and the
+right-click mark is released 400 ms later, the gesture still says "context" or
+"ellipsis", and entries never vanish or appear mid-panel.
 
-Workspace rows on 0.2.2 take a different path: the host menu is built from each
-`ctx.contextMenus.register` provider's `resolve`, which has no React entry to read the
-mark, so the provider checks the same mark while resolving. The "…" pointerdown
-clears it before the host resolves, so the provider returns entries for the
-right-click side or the "…" side according to each entry's "Menu placement".
+Workspace rows and (since 0.2.2-rc.2) session rows both take this path: the host menu
+is built from each `ctx.contextMenus.register` provider's `resolve`, which has no
+React entry to read the mark, so the provider checks the sticky gesture while
+resolving. The "…" pointerdown switches it before the host resolves, so the provider
+returns entries for the right-click side or the "…" side according to each entry's
+"Menu placement".
 
 ### Why the conversation-body menu sorts by screen position
 

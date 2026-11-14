@@ -1,6 +1,12 @@
 import { useState } from '../platform.js';
 
 let rightClickMark = false;
+/**
+ * 最近一次打开菜单的手势（'context' = 右键，'ellipsis' = 行尾「…」）。
+ * 与 rightClickMark 不同，这个值不会在菜单出现后自动复位：宿主会在菜单打开
+ * 之后异步重解析贡献项，若按实时标记判断，条目会在面板里凭空出现或消失。
+ */
+let menuGesture = 'context';
 let rightClickToken = 0;
 let rightClickWatch = null;
 /** 整页 DOM 观察者只建一个，每次右键只 observe/disconnect，不重复 new。 */
@@ -49,6 +55,7 @@ function ensureRightClickObserver() {
 function markRightClickMenu() {
   rightClickToken += 1;
   rightClickMark = true;
+  menuGesture = 'context';
   if (rightClickWatch !== null) return;
   const watch = { known: new Set(menuPanels()), timer: 0 };
   rightClickWatch = watch;
@@ -63,6 +70,12 @@ function markRightClickMenu() {
 function clearRightClickMark() {
   rightClickToken += 1;
   rightClickMark = false;
+  menuGesture = 'ellipsis';
+}
+
+/** 当前菜单是哪只手势打开的；供宿主数据贡献的 resolve 决定条目位置。 */
+function currentMenuGesture() {
+  return menuGesture;
 }
 
 function useRightClickEntry() {
@@ -70,4 +83,4 @@ function useRightClickEntry() {
   return visible;
 }
 
-export { clearRightClickMark, markRightClickMenu, menuPanels, rightClickMark, rightClickToken, rightClickWatch, scheduleRightClickMarkEnd, useRightClickEntry };
+export { clearRightClickMark, currentMenuGesture, markRightClickMenu, menuPanels, rightClickMark, rightClickToken, rightClickWatch, scheduleRightClickMarkEnd, useRightClickEntry };

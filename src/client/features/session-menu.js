@@ -1,82 +1,102 @@
 import { NS, SESSION_MENU_SLOT } from '../constants.js';
 import { SessionDeleteArchivedMenuItem, SessionDeleteMenuItem, SessionOpenWithMenuItem, SessionOpenWithPinnedMenuItem } from './open-with.js';
-import { jsx } from '../platform.js';
-import { appsSnapshot, subscribeApps } from '../store/apps.js';
-
-function registerSessionMenu(ctx) {
-  return ctx.slots.inject(SESSION_MENU_SLOT, function* () {
-    yield ctx.slots.register({
-      name: SESSION_MENU_SLOT,
-      id: 'row-menu-open-with-pinned',
-      order: 495,
-      locale: NS,
-    }, SessionOpenWithPinnedMenuItem);
-    yield ctx.slots.register({
-      name: SESSION_MENU_SLOT,
-      id: 'row-menu-open-with',
-      order: 500,
-      locale: NS,
-    }, SessionOpenWithMenuItem);
-    yield ctx.slots.register({
-      name: SESSION_MENU_SLOT,
-      id: 'row-menu-delete-session',
-      order: 510,
-      locale: NS,
-    }, SessionDeleteMenuItem);
-    yield ctx.slots.register({
-      name: SESSION_MENU_SLOT,
-      id: 'row-menu-delete-archived',
-      order: 520,
-      locale: NS,
-    }, SessionDeleteArchivedMenuItem);
-  });
-}
-
-/* -------------------------------- 工作区行：0.2.2 原生右键贡献 */
+import { hasNativeSessionMenu } from '../host-version.js';
+import { ContextMenuAppIcon, appsSource, contextMenusOf } from './context-menu-shared.js';
+import { registerNativeSessionMenu } from './session-menu-native.js';
 
 /**
- * DSH 0.2.2 把右键菜单改成数据贡献（ctx.contextMenus），工作区行也不再向
- * 行组件传 actions/onCreate，插件原来的自绘入口会取不到 props。这里改为
- * 向宿主注册同一批动作；0.2.1 没有这个服务，保持自绘菜单不变。
+ * 会话行菜单有两种宿主形态：
+ *   - 0.2.2-rc.2 之前：宿主行组件的菜单里留了 slot（SESSION_MENU_SLOT），
+ *     插件注册四个菜单项组件，自绘「打开方式」子菜单和箭头。
+ *   - 0.2.2-rc.2 起：右键由宿主的数据贡献渲染器接管，slot 条目会和原生项
+ *     混在同一个面板里。四个条目改成 target:'session' 的原生贡献，
+ *     箭头、子菜单、分隔线都由宿主画，插件不再自绘。
  */
-function contextMenusOf(ctx) {
-  const usable = (menus) => (menus !== null && menus !== undefined && typeof menus.register === 'function' ? menus : null);
-  // 先走 ctx.get：未 inject 时直接读 ctx.contextMenus 会抛错，读不到服务。
+function registerSlotSessionMenu(ctx) {
+  if (ctx?.slots === null || ctx?.slots === undefined) return null;
   try {
-    const viaGet = usable(ctx?.get?.('contextMenus'));
-    if (viaGet !== null) return viaGet;
-  } catch {
-    /* 服务容器尚未就绪 */
+    return ctx.slots.inject(SESSION_MENU_SLOT, function* () {
+      yield ctx.slots.register({
+        name: SESSION_MENU_SLOT,
+        id: 'row-menu-open-with-pinned',
+        order: 495,
+        locale: NS,
+      }, SessionOpenWithPinnedMenuItem);
+      yield ctx.slots.register({
+        name: SESSION_MENU_SLOT,
+        id: 'row-menu-open-with',
+        order: 500,
+        locale: NS,
+      }, SessionOpenWithMenuItem);
+      yield ctx.slots.register({
+        name: SESSION_MENU_SLOT,
+        id: 'row-menu-delete-session',
+        order: 510,
+        locale: NS,
+      }, SessionDeleteMenuItem);
+      yield ctx.slots.register({
+        name: SESSION_MENU_SLOT,
+        id: 'row-menu-delete-archived',
+        order: 520,
+        locale: NS,
+      }, SessionDeleteArchivedMenuItem);
+    });
+  } catch (error) {
+    console.warn('[dsh-sidebar-row-menu] session slot registration failed:', error);
+    return null;
   }
-  try {
-    return usable(ctx?.contextMenus);
-  } catch {
-    /* 未 inject 的服务属性访问会抛错，按不存在处理 */
-  }
-  return null;
 }
 
-/** 应用缓存包成宿主可订阅的数据源，应用列表到达后菜单会自动重解析。 */
-const appsSource = {
-  getSnapshot: appsSnapshot,
-  subscribe: (listener) => subscribeApps(listener),
-};
+/**
+ * 注册会话菜单。原生宿主上 contextMenus 服务可能晚于插件 apply 出现，
+ * 这里和 workspace 一样按 250ms 重试；真等不到（异常宿主）再退回 slot，
+ * 至少保证 rc.1 那套入口还在。
+ */
+function registerSessionMenu(ctx) {
+  if (!hasNativeSessionMenu()) return registerSlotSessionMenu(ctx);
 
-/** 应用图标走 data 贡献：resolve 里带 src，组件只负责渲染。 */
-function ContextMenuAppIcon({ icon }) {
-  const src = typeof icon?.src === 'string' ? icon.src : '';
-  if (src === '') return null;
-  return jsx('img', {
-    className: 'dsrm-app-icon',
-    src,
-    alt: '',
-    onError: (event) => {
-      event.currentTarget.style.visibility = 'hidden';
-    },
-  });
+  let stopNative = null;
+  let stopSlots = null;
+  let timer = 0;
+  let attempts = 0;
+  let disposed = false;
+
+  const fallBackToSlots = () => {
+    if (disposed || stopSlots !== null) return;
+    stopSlots = registerSlotSessionMenu(ctx);
+  };
+
+  const start = () => {
+    timer = 0;
+    if (disposed || stopNative !== null || stopSlots !== null) return;
+    if (contextMenusOf(ctx) === null) {
+      if (attempts >= 40 || typeof setTimeout !== 'function') {
+        fallBackToSlots();
+        return;
+      }
+      attempts += 1;
+      timer = setTimeout(start, 250);
+      return;
+    }
+    stopNative = registerNativeSessionMenu(ctx);
+    if (stopNative === null) fallBackToSlots();
+  };
+
+  start();
+  return () => {
+    disposed = true;
+    if (timer !== 0) clearTimeout(timer);
+    try {
+      stopNative?.();
+    } catch (error) {
+      console.warn('[dsh-sidebar-row-menu] session context teardown failed:', error);
+    }
+    try {
+      stopSlots?.();
+    } catch (error) {
+      console.warn('[dsh-sidebar-row-menu] session slot teardown failed:', error);
+    }
+  };
 }
-
-/* --------------------- 工作区归档会话：按工作区单独显示/隐藏 */
-
 
 export { ContextMenuAppIcon, appsSource, contextMenusOf, registerSessionMenu };

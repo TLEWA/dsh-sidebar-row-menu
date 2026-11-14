@@ -7,6 +7,15 @@ const STYLE = `
 .dsrm-submenu-chevron{color:var(--dsw-alias-label-caption)}
 .dsrm-submenu-chevron-flipped{transform:scaleX(-1)}
 .dsrm-host-label{display:flex;align-items:center;gap:6px;width:100%}
+/* 宿主 0.2.2-rc.2 起会在菜单项尾部自带一个箭头（button 的直接子 svg）；更早的宿主不画，
+   插件 label 里的箭头负责兜底。检测到宿主箭头时隐藏插件箭头，避免出现两个 >。 */
+button[aria-haspopup="menu"]:not(.dsrm-submenu-trigger):has(> svg) .dsrm-submenu-chevron{display:none}
+/* 0.2.2-rc.2 起会话行菜单由宿主提供，原生「在应用中打开」与插件的「打开方式」重复。
+   宿主不把贡献 id 暴露到 DOM；原生项稳定可辨的特征是 contextMenu.icon 槽里的
+   dsw-icon-right-up-outline-regular（open-in-app 的图标）。插件在自己的打开方式 label
+   上带 dsrm-native-dedupe，下面的规则只命中“占用该图标槽且不是插件贡献”的子菜单项，
+   不会连带隐藏其他插件的图标/子菜单。rc.1 及更早的面板没有该标记，规则不生效。 */
+[role="menu"]:has(.dsrm-native-dedupe) button[role="menuitem"][aria-haspopup="menu"]:has([data-slot="contextMenu.icon"] svg[data-icon="dsw-icon-right-up-outline-regular"]):not(:has(.dsrm-native-dedupe)){display:none}
 .dsrm-host-label-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .dsrm-check{margin-left:auto;flex:none;color:var(--dsw-alias-label-primary)}
 .dsrm-submenu{position:fixed;z-index:1101;min-width:180px;max-width:300px;max-height:min(380px,64vh);overflow:auto;padding:4px}

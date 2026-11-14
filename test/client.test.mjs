@@ -820,7 +820,13 @@ test('0.2.2-rc.1 keeps the slot entries even when contextMenus exists', () => {
 });
 
 test('the native open-in-app dedupe rule ships with the client bundle', () => {
-  assert.equal(source.includes('[role="menu"]:has(.dsrm-native-dedupe)'), true);
+  // 只允许隐藏宿主原生「在应用中打开」：带 contextMenu.icon 槽的 right-up 图标，
+  // 且不是插件自己的 dsrm-native-dedupe 项；不能回到按“任意直接 svg”一刀切。
+  assert.equal(
+    source.includes('button[role="menuitem"][aria-haspopup="menu"]:has([data-slot="contextMenu.icon"] svg[data-icon="dsw-icon-right-up-outline-regular"]):not(:has(.dsrm-native-dedupe))'),
+    true,
+  );
+  assert.equal(source.includes(':has(> svg):not(:has(.dsrm-native-dedupe))'), false);
 });
 
 test('unarchived sessions get the delete entry only after opting in', () => {

@@ -28,6 +28,7 @@ function loadClient(stored = {}, options = {}) {
       },
     },
     location: { href: 'http://127.0.0.1:10102/' },
+    ...(options.boot === undefined ? {} : { __DSH_BOOT__: options.boot }),
     localStorage,
     addEventListener(type, listener, capture) {
       listeners.push({ type, listener, capture });
@@ -747,6 +748,79 @@ test('session entries disappear when dsh-session-menu already provides them', ()
   const deleteArchived = registrations.find((entry) => entry.spec.id === 'row-menu-delete-archived');
   assert.equal(openWith.Component({ sessionId: 's1', displayTitle: 'Session 1', useMenuOpenState: () => [true, () => {}], t }), null);
   assert.equal(deleteArchived.Component({ sessionId: 's1', displayTitle: 'Session 1', useMenuOpenState: () => [true, () => {}], t }), null);
+});
+
+test('0.2.2-rc.2+ registers session entries as native context menu contributions', () => {
+  const { registration } = loadClient({}, { boot: { release: { version: '0.2.2-rc.3' } } });
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+    workspaces: {
+      list: {
+        getSnapshot: () => ({ archivedSessionIds: ['s1'] }),
+        subscribe: () => () => {},
+      },
+    },
+  });
+  exported.apply(ctx);
+
+  const session = providers.filter((spec) => spec.target === 'session');
+  assert.equal(
+    session.map((spec) => spec.id).join(','),
+    'sidebar-row-menu.session.pinned,sidebar-row-menu.session.open-with,sidebar-row-menu.session.delete,sidebar-row-menu.session.delete-archived',
+  );
+  assert.deepEqual(session.map((spec) => spec.order), [495, 500, 510, 520]);
+
+  // 宿主接管后不能再往旧 slot 里塞会话项，否则同一面板会出现两份。
+  const slotEntries = ctx.slots.registrations.filter(
+    (entry) => entry.spec.name === 'sidebar.workspaces.session.menu.item',
+  );
+  assert.equal(slotEntries.length, 0);
+
+  const target = { sessionId: 's1', displayTitle: 'Session 1' };
+  const openWith = session[1].resolve(target);
+  assert.equal(openWith.length, 1);
+  assert.equal(openWith[0].label.props.className, 'dsrm-host-label dsrm-native-dedupe');
+  // 应用列表没回来时也要有子菜单：宿主据此画箭头，点开是一条禁用占位项。
+  assert.equal(openWith[0].children[0].disabled, true);
+
+  const remove = session[2].resolve(target);
+  assert.equal(remove.length, 1);
+  assert.equal(remove[0].danger, true);
+  assert.equal(typeof remove[0].run, 'function');
+
+  assert.equal(session[3].resolve(target).length, 1);
+});
+
+test('0.2.2-rc.1 keeps the slot entries even when contextMenus exists', () => {
+  const { registration } = loadClient({}, { boot: { release: { version: '0.2.2-rc.1' } } });
+  const exported = registration.factory(makeRequire([], [], []));
+  const providers = [];
+  const ctx = makeCtx({
+    contextMenus: {
+      register(spec) {
+        providers.push(spec);
+        return () => {};
+      },
+    },
+  });
+  exported.apply(ctx);
+
+  const sessionEntries = ctx.slots.registrations.filter(
+    (entry) => entry.spec.name === 'sidebar.workspaces.session.menu.item',
+  );
+  assert.equal(sessionEntries.length, 4);
+  assert.equal(providers.filter((spec) => spec.target === 'session').length, 0);
+});
+
+test('the native open-in-app dedupe rule ships with the client bundle', () => {
+  assert.equal(source.includes('[role="menu"]:has(.dsrm-native-dedupe)'), true);
 });
 
 test('unarchived sessions get the delete entry only after opting in', () => {

@@ -1,4 +1,4 @@
-import { MENU_ATTR } from './constants.js';
+import { MENU_ATTR, NS } from './constants.js';
 import { createRoot } from './platform.js';
 
 /** 换掉「…」菜单的锚定按钮（null = 没有）。 */
@@ -73,6 +73,19 @@ function serviceOf(ctx, name) {
   }
 }
 
+/**
+ * 取绑定到本插件命名空间的翻译函数。会话菜单、工作区菜单和工具条菜单
+ * 共用同一份实现，放在 runtime 里避免 features 之间互相 import 成环。
+ */
+function localeOf(ctx) {
+  try {
+    if (typeof ctx?.locale?.bind === 'function') return ctx.locale.bind(NS);
+  } catch (error) {
+    console.warn('[dsh-sidebar-row-menu] locale bind failed:', error);
+  }
+  return (key) => key;
+}
+
 export { setRootCtx, setEllipsisTrigger,
   beginMenu,
-  closeMenu, ellipsisTrigger, menuHost, menuRoot, rootCtx, serviceOf, unmountAt };
+  closeMenu, ellipsisTrigger, localeOf, menuHost, menuRoot, rootCtx, serviceOf, unmountAt };

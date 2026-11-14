@@ -292,7 +292,7 @@ https://github.com/TLEWA/dsh-sidebar-row-menu#v1.4.2
 Or install the tarball built by Actions directly, without Git:
 
 ```
-https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.13.0/dsh-sidebar-row-menu-1.13.0.tgz
+https://github.com/TLEWA/dsh-sidebar-row-menu/releases/download/v1.13.1/dsh-sidebar-row-menu-1.13.1.tgz
 ```
 
 Equivalent command line:

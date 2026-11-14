@@ -30,8 +30,10 @@ On 0.2.2-rc.1 and earlier, session menu content comes from the
 actions are all there. This plugin only appends its own entries; it does not copy or
 hardcode any built-in action. Since 0.2.2-rc.2 the host's `contextMenus` render the
 same entries and the plugin still registers only its own. The host's built-in
-"In app" entry overlaps with this plugin's "Open with", so the plugin hides it inside
-the session right-click panel; the row's "…" menu is untouched.
+"In app" entry overlaps with this plugin's "Open with", so the plugin hides only that
+one native entry inside the session right-click panel (identified by its icon in the
+`contextMenu.icon` slot, so other plugins' submenus are untouched); the row's "…"
+menu is untouched.
 
 > The plugin's entries appear in the right-click menu by default. Settings → "Row
 > menu" → "Menu placement" can move each entry to the "…" menu only, or show it in
@@ -82,7 +84,7 @@ comes from the host menu and the actions already in the slot:
 
 | Source | Entries |
 | --- | --- |
-| DSH built-ins | Rename, Fork session, Pin / Unpin, Archive / Unarchive, Copy Session ID; in the right-click panel on 0.2.2-rc.2+ the plugin hides the built-in "In app" entry so it does not duplicate "Open with" (the row's "…" menu keeps it) |
+| DSH built-ins | Rename, Fork session, Pin / Unpin, Archive / Unarchive, Copy Session ID; in the right-click panel on 0.2.2-rc.2+ the plugin hides only the built-in "In app" entry so it does not duplicate "Open with" (identified by its right-up icon in the `contextMenu.icon` slot, so other plugins' submenus are untouched; the row's "…" menu keeps it) |
 | Other plugins | Whatever they register into `sidebar.workspaces.session.menu.item` |
 | This plugin | Pinned open-with apps (top level), Open with (submenu), Delete session / Delete all archived sessions (archived rows by default; unarchived rows can be opted in) |
 

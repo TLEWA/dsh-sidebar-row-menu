@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Cleanup: removed the accidentally committed `libs/` directory (asar probe scripts plus GraphQL/PR
+  drafts left over from a previous audit) and ignored it in `.gitignore` so `git add -A` cannot sweep
+  it in again. No runtime code touched.
 - Docs: corrected the version-probe comment in `src/client/host-version.js`. An unreadable
   `__DSH_BOOT__.release.version` is treated as an **old** host (fall back to slot injection so the
   session menu is never lost); the comment claimed the opposite, contradicting

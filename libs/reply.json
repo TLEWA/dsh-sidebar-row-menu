@@ -1,0 +1,1 @@
+{"body":"已按建议收窄选择器：现在只命中 `contextMenu.icon` 槽里带 `dsw-icon-right-up-outline-regular` 的宿主「在应用中打开」项，并用 `:not(:has(.dsrm-native-dedupe))` 排除插件自己的贡献；不再按“任意直接 svg”一刀切。测试里同时断言旧的宽选择器不再出现。\n\n真机 0.2.2-rc.3 回归：同一面板注入 right-up 与 edit 两个假子菜单——right-up 项 `display:none`，edit 项保持 `inline-block`；插件的「打开方式」仍可见。修复提交 f657e27。"}

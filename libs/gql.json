@@ -1,0 +1,1 @@
+{"query":"query { repository(owner:\"TLEWA\", name:\"dsh-sidebar-row-menu\") { pullRequest(number:15) { reviewThreads(first:20) { nodes { id isResolved comments(first:10) { nodes { databaseId body } } } } } } }"}

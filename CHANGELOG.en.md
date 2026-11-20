@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+- Docs: corrected the version-probe comment in `src/client/host-version.js`. An unreadable
+  `__DSH_BOOT__.release.version` is treated as an **old** host (fall back to slot injection so the
+  session menu is never lost); the comment claimed the opposite, contradicting
+  `hasNativeSessionMenu` below. Comment-only change, artifact unchanged.
+
 ## 1.13.2 — 2026-11-14
 
 - **File "Open with" no longer waits for OS association enumeration.** The first Windows enumeration may start PowerShell, compile C# and call Shell COM, sometimes for more than ten seconds. The first right-click now immediately shows "Open with the default application" and "Show in folder" while associations load in the background; when the answer arrives the host re-resolves the menu in place and replaces the fallbacks with the application list. Associations are cached per extension for 5 minutes and refreshed in the background after 60 seconds; one extension issues one request, and a late answer is never dropped by a timeout.

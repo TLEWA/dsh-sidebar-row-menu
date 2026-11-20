@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- 清理：删除误提交的 `libs/`（asar 解包探针与 GraphQL/PR 草稿，属上一轮审计的本地临时文件），
+  并在 `.gitignore` 里忽略该目录，避免 `git add -A` 再次把它们带进仓库。仅删文件，不影响运行时代码。
 - 文档：修正 `src/client/host-version.js` 的版本探测注释。读不到 `__DSH_BOOT__.release.version`
   时实际按「旧宿主」处理（退回 slot 注入，避免会话菜单整组消失），原注释写反成「按新宿主处理」，
   与下方 `hasNativeSessionMenu` 的约定相反。仅注释变更，产物未变。
